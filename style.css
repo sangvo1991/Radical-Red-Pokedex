@@ -16,11 +16,11 @@ body {
 	margin-top: 20px;
 }
 
-#speciesFilterInputWrapper, #speciesFilterCategoryWrapper {
+#speciesFilterInputWrapper, #speciesFilterCategoryWrapper, #advancedSearchInputWrapper {
 	position: relative;
 }
 
-#speciesFilterInputDropdown {
+#speciesFilterInputDropdown, #advancedSearchAutocompleteDropdown {
 	overflow-y: scroll;
     overflow-x: hidden;
 }
@@ -102,9 +102,43 @@ li:hover {
 	justify-content: center;
 }
 
-#advancedSearchInput {
+#advancedSearchInputWrapper {
 	flex: 1 1 100%;
 	min-width: 0;
+}
+
+#advancedSearchInput {
+	width: 100%;
+}
+
+#advancedSearchAutocompleteDropdown {
+	top: auto;
+	bottom: calc(100% + 2px);
+	max-height: 260px;
+}
+
+.advancedSearchAutocompleteItem {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.advancedSearchAutocompleteItem.active,
+.advancedSearchAutocompleteItem:hover {
+	background: #3c3a3a;
+}
+
+.advancedSearchAutocompleteLabel {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.advancedSearchAutocompleteMeta {
+	color: #c0c0c0;
+	font-size: 0.85rem;
+	flex-shrink: 0;
 }
 
 #advancedSearchStatus {

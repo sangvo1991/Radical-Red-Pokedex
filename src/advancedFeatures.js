@@ -72,6 +72,9 @@ let abilityPackageCache = {
 	base: new Map(),
 	hardcore: new Map()
 };
+let advancedSearchAutocompleteMetadata = null;
+let advancedSearchAutocompleteSuggestions = [];
+let advancedSearchAutocompleteIndex = -1;
 
 function resetAdvancedFeatureCaches() {
 	speciesSearchCache = new Map();
@@ -83,11 +86,51 @@ function resetAdvancedFeatureCaches() {
 		base: new Map(),
 		hardcore: new Map()
 	};
+	advancedSearchAutocompleteMetadata = null;
+	advancedSearchAutocompleteSuggestions = [];
+	advancedSearchAutocompleteIndex = -1;
 }
 
 function setupAdvancedFeatures() {
 	buildHardcoreState();
 	setupAdvancedSearch();
+}
+
+function sortSearchValues(values) {
+	return uniqStrings(values).sort((left, right) => left.localeCompare(right));
+}
+
+function buildAdvancedSearchAutocompleteMetadata() {
+	if (advancedSearchAutocompleteMetadata) {
+		return advancedSearchAutocompleteMetadata;
+	}
+
+	const speciesNames = sortSearchValues(Object.values(species).map(mon => mon.key));
+	const typeNames = sortSearchValues(Object.values(types).map(type => type.name));
+	const abilityNames = sortSearchValues(Object.values(abilities).map(ability => getAbilityDisplayNameById(ability.ID)));
+	const moveNames = sortSearchValues(Object.values(moves).map(move => move.name));
+	const itemNames = sortSearchValues(Object.values(items).map(item => item?.name));
+	const eggGroupNames = sortSearchValues(Object.values(eggGroups).filter(Boolean));
+	const hardcoreAbilityNames = sortSearchValues(
+		Object.values(species).flatMap(mon => getSpeciesAbilityPackage(mon, true).map(ability => ability.name))
+	);
+	const hardcoreMoveNames = sortSearchValues(
+		Object.values(species).flatMap(mon => getSpeciesMovePackage(mon, true).all.map(move => move.name))
+	);
+
+	const valuesByKey = {
+		speciesNames,
+		typeNames,
+		abilityNames,
+		hardcoreAbilityNames,
+		moveNames,
+		hardcoreMoveNames,
+		itemNames,
+		eggGroupNames
+	};
+
+	advancedSearchAutocompleteMetadata = createAdvancedSearchAutocompleteMetadata(valuesByKey);
+	return advancedSearchAutocompleteMetadata;
 }
 
 function buildHardcoreState() {
@@ -147,16 +190,599 @@ function buildHardcoreState() {
 
 function setupAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
-	if (!input) {
+	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
+	const wrapper = document.getElementById('advancedSearchInputWrapper');
+	if (!input || !dropdown || !wrapper) {
 		return;
 	}
 
+	buildAdvancedSearchAutocompleteMetadata();
+
 	input.addEventListener('keydown', function(event) {
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			if (advancedSearchAutocompleteSuggestions.length) {
+				event.preventDefault();
+				moveAdvancedSearchAutocompleteSelection(event.key === 'ArrowDown' ? 1 : -1);
+			}
+			return;
+		}
+
+		if (event.key === 'Tab' && advancedSearchAutocompleteSuggestions.length) {
+			event.preventDefault();
+			applyAdvancedSearchAutocompleteSuggestion(
+				advancedSearchAutocompleteSuggestions[Math.max(advancedSearchAutocompleteIndex, 0)]
+			);
+			return;
+		}
+
+		if (event.key === 'Escape') {
+			hideAdvancedSearchAutocomplete();
+			return;
+		}
+
 		if (event.key === 'Enter') {
 			event.preventDefault();
 			runAdvancedSearch();
 		}
 	});
+
+	input.addEventListener('input', refreshAdvancedSearchAutocomplete);
+	input.addEventListener('click', refreshAdvancedSearchAutocomplete);
+	input.addEventListener('focus', refreshAdvancedSearchAutocomplete);
+
+	document.addEventListener('mousedown', function(event) {
+		if (!wrapper.contains(event.target)) {
+			hideAdvancedSearchAutocomplete();
+		}
+	});
+}
+
+function hideAdvancedSearchAutocomplete() {
+	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
+	if (!dropdown) {
+		return;
+	}
+
+	advancedSearchAutocompleteSuggestions = [];
+	advancedSearchAutocompleteIndex = -1;
+	dropdown.innerHTML = '';
+	dropdown.className = 'hide';
+}
+
+function moveAdvancedSearchAutocompleteSelection(direction) {
+	if (!advancedSearchAutocompleteSuggestions.length) {
+		return;
+	}
+
+	advancedSearchAutocompleteIndex += direction;
+	if (advancedSearchAutocompleteIndex < 0) {
+		advancedSearchAutocompleteIndex = advancedSearchAutocompleteSuggestions.length - 1;
+	}
+	if (advancedSearchAutocompleteIndex >= advancedSearchAutocompleteSuggestions.length) {
+		advancedSearchAutocompleteIndex = 0;
+	}
+
+	renderAdvancedSearchAutocomplete();
+}
+
+function refreshAdvancedSearchAutocomplete() {
+	const input = document.getElementById('advancedSearchInput');
+	if (!input) {
+		return;
+	}
+
+	const cursorIndex = input.selectionStart ?? input.value.length;
+	advancedSearchAutocompleteSuggestions = getAdvancedSearchAutocompleteSuggestions(input.value, cursorIndex);
+	advancedSearchAutocompleteIndex = advancedSearchAutocompleteSuggestions.length ? 0 : -1;
+	renderAdvancedSearchAutocomplete();
+}
+
+function renderAdvancedSearchAutocomplete() {
+	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
+	if (!dropdown) {
+		return;
+	}
+
+	if (!advancedSearchAutocompleteSuggestions.length) {
+		hideAdvancedSearchAutocomplete();
+		return;
+	}
+
+	dropdown.innerHTML = '';
+	advancedSearchAutocompleteSuggestions.forEach((suggestion, index) => {
+		const item = document.createElement('li');
+		item.className = `advancedSearchAutocompleteItem${index === advancedSearchAutocompleteIndex ? ' active' : ''}`;
+
+		const label = document.createElement('span');
+		label.className = 'advancedSearchAutocompleteLabel';
+		label.textContent = suggestion.label;
+
+		const meta = document.createElement('span');
+		meta.className = 'advancedSearchAutocompleteMeta';
+		meta.textContent = suggestion.meta;
+
+		item.append(label, meta);
+		item.addEventListener('mousedown', function(event) {
+			event.preventDefault();
+			applyAdvancedSearchAutocompleteSuggestion(suggestion);
+		});
+		dropdown.append(item);
+	});
+
+	dropdown.className = '';
+
+	const activeElement = dropdown.children[advancedSearchAutocompleteIndex];
+	if (activeElement) {
+		activeElement.scrollIntoView({ block: 'nearest' });
+	}
+}
+
+function tokenizeAdvancedSearchPartial(input) {
+	const tokens = [];
+	let index = 0;
+
+	while (index < input.length) {
+		const start = index;
+		const current = input[index];
+
+		if (/\s/.test(current)) {
+			index++;
+			continue;
+		}
+
+		const twoChar = input.slice(index, index + 2);
+		if (['>=', '<=', '!=', '=='].includes(twoChar)) {
+			tokens.push({ type: 'operator', value: twoChar, start, end: index + 2, partial: false });
+			index += 2;
+			continue;
+		}
+
+		if (['(', ')', ','].includes(current)) {
+			tokens.push({ type: current, value: current, start, end: index + 1, partial: false });
+			index++;
+			continue;
+		}
+
+		if (['>', '<', '='].includes(current)) {
+			tokens.push({ type: 'operator', value: current, start, end: index + 1, partial: false });
+			index++;
+			continue;
+		}
+
+		if (current === '!') {
+			tokens.push({ type: 'operator', value: current, start, end: index + 1, partial: true });
+			index++;
+			continue;
+		}
+
+		if (current === '"' || current === '\'') {
+			const quote = current;
+			let value = '';
+			index++;
+			while (index < input.length && input[index] !== quote) {
+				if (input[index] === '\\' && index + 1 < input.length) {
+					value += input[index + 1];
+					index += 2;
+					continue;
+				}
+				value += input[index];
+				index++;
+			}
+
+			if (input[index] === quote) {
+				index++;
+				tokens.push({ type: 'string', value, quote, start, end: index, partial: false });
+			}
+			else {
+				tokens.push({ type: 'string', value, quote, start, end: input.length, partial: true });
+				break;
+			}
+			continue;
+		}
+
+		if (/[0-9]/.test(current)) {
+			let value = current;
+			index++;
+			while (index < input.length && /[0-9.]/.test(input[index])) {
+				value += input[index];
+				index++;
+			}
+			tokens.push({ type: 'number', value, start, end: index, partial: index === input.length });
+			continue;
+		}
+
+		if (/[A-Za-z_]/.test(current)) {
+			let value = current;
+			index++;
+			while (index < input.length && /[A-Za-z0-9_.-]/.test(input[index])) {
+				value += input[index];
+				index++;
+			}
+			tokens.push({ type: 'word', value, start, end: index, partial: index === input.length });
+			continue;
+		}
+
+		tokens.push({ type: 'unknown', value: current, start, end: index + 1, partial: true });
+		break;
+	}
+
+	return tokens;
+}
+
+function isAdvancedSearchScalarToken(token) {
+	return token && ['word', 'number', 'string'].includes(token.type);
+}
+
+function isAdvancedSearchOperatorToken(token) {
+	return token && (
+		token.type === 'operator' ||
+		(token.type === 'word' && ['has', 'have'].includes(token.value.toLowerCase()))
+	);
+}
+
+function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentAttribute, stack, metadata) {
+	if (!activeToken) {
+		return null;
+	}
+
+	const attribute = currentAttribute ? metadata.byName[normalizeSearchKey(currentAttribute)] : null;
+	switch (state) {
+		case 'expectAttribute':
+			if (activeToken.type === 'word' && metadata.byName[normalizeSearchKey(activeToken.value)]) {
+				return { state: 'expectOperator', currentAttribute: activeToken.value };
+			}
+			break;
+		case 'expectOperator':
+			if (
+				(activeToken.type === 'operator' && ['=', '==', '!=', '>', '>=', '<', '<='].includes(activeToken.value)) ||
+				(activeToken.type === 'word' && ['has', 'have'].includes(activeToken.value.toLowerCase()))
+			) {
+				return { state: 'expectValue', currentAttribute };
+			}
+			break;
+		case 'expectValue':
+			if (activeToken.type === '(') {
+				return { state: 'expectValueListItem', currentAttribute, stack: [...stack, 'valueList'] };
+			}
+			if (
+				attribute &&
+				(
+					(attribute.kind === 'number' && activeToken.type === 'number') ||
+					(attribute.kind !== 'number' && ['word', 'string'].includes(activeToken.type))
+				)
+			) {
+				return { state: 'expectLogicalOrEnd', currentAttribute };
+			}
+			break;
+		case 'expectValueListItem':
+			if (
+				attribute &&
+				(
+					(attribute.kind === 'number' && activeToken.type === 'number') ||
+					(attribute.kind !== 'number' && ['word', 'string'].includes(activeToken.type))
+				)
+			) {
+				return { state: 'expectValueListDelimiter', currentAttribute };
+			}
+			break;
+		case 'expectValueListDelimiter':
+			if (activeToken.type === ',') {
+				return { state: 'expectValueListItem', currentAttribute };
+			}
+			if (activeToken.type === ')' && stack[stack.length - 1] === 'valueList') {
+				return { state: 'expectLogicalOrEnd', currentAttribute, stack: stack.slice(0, -1) };
+			}
+			break;
+		case 'expectLogicalOrEnd':
+			if (activeToken.type === 'word' && ['and', 'or'].includes(activeToken.value.toLowerCase())) {
+				return { state: 'expectAttribute', currentAttribute: null };
+			}
+			if (activeToken.type === ')' && stack[stack.length - 1] === 'expression') {
+				return { state: 'expectLogicalOrEnd', currentAttribute, stack: stack.slice(0, -1) };
+			}
+			break;
+		default:
+			break;
+	}
+
+	return null;
+}
+
+function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
+	const tokens = tokenizeAdvancedSearchPartial(input.slice(0, cursorIndex));
+	let activeToken = null;
+	if (tokens.length && tokens[tokens.length - 1].partial) {
+		activeToken = tokens.pop();
+	}
+
+	let state = 'expectAttribute';
+	let currentAttribute = null;
+	const stack = [];
+
+	for (const token of tokens) {
+		switch (state) {
+			case 'expectAttribute':
+				if (token.type === '(') {
+					stack.push('expression');
+					break;
+				}
+				if (token.type === 'word') {
+					currentAttribute = token.value;
+					state = 'expectOperator';
+					break;
+				}
+				if (token.type === ')' && stack[stack.length - 1] === 'expression') {
+					stack.pop();
+					state = 'expectLogicalOrEnd';
+					break;
+				}
+				return null;
+			case 'expectOperator':
+				if (isAdvancedSearchOperatorToken(token)) {
+					state = 'expectValue';
+					break;
+				}
+				return null;
+			case 'expectValue':
+				if (token.type === '(') {
+					stack.push('valueList');
+					state = 'expectValueListItem';
+					break;
+				}
+				if (isAdvancedSearchScalarToken(token)) {
+					state = 'expectLogicalOrEnd';
+					break;
+				}
+				return null;
+			case 'expectValueListItem':
+				if (isAdvancedSearchScalarToken(token)) {
+					state = 'expectValueListDelimiter';
+					break;
+				}
+				if (token.type === ')' && stack[stack.length - 1] === 'valueList') {
+					stack.pop();
+					state = 'expectLogicalOrEnd';
+					break;
+				}
+				return null;
+			case 'expectValueListDelimiter':
+				if (token.type === ',') {
+					state = 'expectValueListItem';
+					break;
+				}
+				if (token.type === ')' && stack[stack.length - 1] === 'valueList') {
+					stack.pop();
+					state = 'expectLogicalOrEnd';
+					break;
+				}
+				return null;
+			case 'expectLogicalOrEnd':
+				if (token.type === 'word' && ['and', 'or'].includes(token.value.toLowerCase())) {
+					currentAttribute = null;
+					state = 'expectAttribute';
+					break;
+				}
+				if (token.type === ')' && stack[stack.length - 1] === 'expression') {
+					stack.pop();
+					state = 'expectLogicalOrEnd';
+					break;
+				}
+				return null;
+			default:
+				return null;
+		}
+	}
+
+	const metadata = buildAdvancedSearchAutocompleteMetadata();
+	const finalized = tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentAttribute, stack, metadata);
+	if (finalized) {
+		state = finalized.state;
+		currentAttribute = finalized.currentAttribute;
+		activeToken = null;
+		if (finalized.stack) {
+			stack.splice(0, stack.length, ...finalized.stack);
+		}
+	}
+
+	const rangeStart = activeToken ? activeToken.start : cursorIndex;
+	const rangeEnd = activeToken ? activeToken.end : cursorIndex;
+	const fragment = activeToken ? activeToken.value : '';
+	const attributeName = currentAttribute ? normalizeSearchKey(currentAttribute) : null;
+
+	return {
+		state,
+		stack,
+		activeToken,
+		fragment,
+		rangeStart,
+		rangeEnd,
+		attribute: attributeName ? metadata.byName[attributeName] : null
+	};
+}
+
+function scoreAdvancedSearchSuggestion(suggestion, fragment) {
+	if (!fragment) {
+		return 0;
+	}
+
+	const normalizedFragment = normalizeSearchKey(fragment);
+	const normalizedLabel = normalizeSearchKey(suggestion.label);
+	const rawFragment = String(fragment).trim().toLowerCase();
+	const rawLabel = suggestion.label.toLowerCase();
+
+	if (!normalizedFragment && rawFragment) {
+		if (rawLabel === rawFragment) {
+			return 0;
+		}
+		if (rawLabel.startsWith(rawFragment)) {
+			return 1;
+		}
+		if (rawLabel.includes(rawFragment)) {
+			return 2;
+		}
+		return 99;
+	}
+
+	if (normalizedLabel === normalizedFragment) {
+		return 0;
+	}
+	if (normalizedLabel.startsWith(normalizedFragment)) {
+		return 1;
+	}
+	if (normalizedLabel.includes(normalizedFragment)) {
+		return 2;
+	}
+	return 99;
+}
+
+function filterAdvancedSearchSuggestions(suggestions, fragment) {
+	const normalizedFragment = normalizeSearchKey(fragment);
+	const rawFragment = String(fragment || '').trim().toLowerCase();
+	let matches = suggestions;
+
+	if (normalizedFragment) {
+		matches = suggestions.filter(suggestion => normalizeSearchKey(suggestion.label).includes(normalizedFragment));
+	}
+	else if (rawFragment) {
+		matches = suggestions.filter(suggestion => suggestion.label.toLowerCase().includes(rawFragment));
+	}
+
+	return matches
+		.sort((left, right) => {
+			const scoreDiff = scoreAdvancedSearchSuggestion(left, fragment) - scoreAdvancedSearchSuggestion(right, fragment);
+			if (scoreDiff !== 0) {
+				return scoreDiff;
+			}
+			return left.label.localeCompare(right.label);
+		})
+		.slice(0, 12);
+}
+
+function quoteAdvancedSearchValue(value) {
+	return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`;
+}
+
+function buildAdvancedSearchValueSuggestions(attribute) {
+	if (!attribute) {
+		return [];
+	}
+
+	if (attribute.kind === 'number') {
+		return attribute.samples.map(sample => ({
+			label: String(sample),
+			insertText: String(sample),
+			meta: attribute.kind,
+			category: 'value'
+		}));
+	}
+
+	return attribute.values.map(value => ({
+		label: value,
+		insertText: quoteAdvancedSearchValue(value),
+		meta: attribute.kind,
+		category: 'value'
+	}));
+}
+
+function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
+	const context = getAdvancedSearchAutocompleteContext(input, cursorIndex);
+	if (!context || (context.activeToken && context.activeToken.type === 'unknown')) {
+		return [];
+	}
+
+	const metadata = buildAdvancedSearchAutocompleteMetadata();
+	switch (context.state) {
+		case 'expectAttribute':
+			return filterAdvancedSearchSuggestions(
+				metadata.attributes.map(attribute => ({
+					label: attribute.name,
+					insertText: attribute.name,
+					meta: attribute.kind,
+					category: 'attribute'
+				})),
+				context.fragment
+			);
+		case 'expectOperator':
+			if (!context.attribute) {
+				return [];
+			}
+			return filterAdvancedSearchSuggestions(
+				(context.attribute.kind === 'number'
+					? ['=', '!=', '>', '>=', '<', '<=']
+					: ['=', '!=', 'has']
+				).map(operator => ({
+					label: operator,
+					insertText: operator,
+					meta: 'operator',
+					category: 'operator'
+				})),
+				context.fragment
+			);
+		case 'expectValue':
+		case 'expectValueListItem':
+			return filterAdvancedSearchSuggestions(buildAdvancedSearchValueSuggestions(context.attribute), context.fragment);
+		case 'expectValueListDelimiter':
+			return filterAdvancedSearchSuggestions([
+				{ label: ',', insertText: ',', meta: 'separator', category: 'delimiter' },
+				{ label: ')', insertText: ')', meta: 'close list', category: 'delimiter' }
+			], context.fragment);
+		case 'expectLogicalOrEnd': {
+			const suggestions = [
+				{ label: 'and', insertText: 'and', meta: 'logical', category: 'logical' },
+				{ label: 'or', insertText: 'or', meta: 'logical', category: 'logical' }
+			];
+			if (context.stack.includes('expression')) {
+				suggestions.push({ label: ')', insertText: ')', meta: 'close group', category: 'delimiter' });
+			}
+			return filterAdvancedSearchSuggestions(suggestions, context.fragment);
+		}
+		default:
+			return [];
+	}
+}
+
+function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
+	const input = document.getElementById('advancedSearchInput');
+	if (!input || !suggestion) {
+		return;
+	}
+
+	const cursorIndex = input.selectionStart ?? input.value.length;
+	const context = getAdvancedSearchAutocompleteContext(input.value, cursorIndex);
+	if (!context) {
+		return;
+	}
+
+	let replacement = suggestion.insertText;
+	const previousChar = context.rangeStart > 0 ? input.value[context.rangeStart - 1] : '';
+
+	if (
+		['operator', 'logical', 'value'].includes(suggestion.category) &&
+		previousChar &&
+		!/\s|\(|,/.test(previousChar)
+	) {
+		replacement = ` ${replacement}`;
+	}
+
+	if (suggestion.category === 'operator' || suggestion.category === 'logical' || suggestion.insertText === ',') {
+		replacement += ' ';
+	}
+
+	const nextChar = input.value[context.rangeEnd] || '';
+	if (nextChar && /\S/.test(nextChar) && suggestion.insertText === ')') {
+		replacement += ' ';
+	}
+
+	const newValue =
+		input.value.slice(0, context.rangeStart) +
+		replacement +
+		input.value.slice(context.rangeEnd);
+	const newCursor = context.rangeStart + replacement.length;
+
+	input.value = newValue;
+	input.focus();
+	input.setSelectionRange(newCursor, newCursor);
+	refreshAdvancedSearchAutocomplete();
 }
 
 function showAdvancedSearchGuide() {
@@ -245,6 +871,7 @@ function runAdvancedSearch() {
 		predicate(Object.values(species)[0]);
 		advancedSearchPredicate = predicate;
 		advancedSearchQuery = query;
+		hideAdvancedSearchAutocomplete();
 		refreshSpeciesResults();
 	}
 	catch (error) {
@@ -260,6 +887,7 @@ function clearAdvancedSearch() {
 
 	advancedSearchPredicate = null;
 	advancedSearchQuery = '';
+	hideAdvancedSearchAutocomplete();
 	refreshSpeciesResults();
 }
 
