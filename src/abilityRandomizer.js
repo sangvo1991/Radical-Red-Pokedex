@@ -417,6 +417,9 @@ function clearCurrentSave() {
 function processSaveData(data) {
     saveData = data;
     localStorage.setItem("saveData", JSON.stringify(saveData));
+    if (typeof resetAdvancedFeatureCaches === "function") {
+        resetAdvancedFeatureCaches();
+    }
 
     if (data) {
         const flags = [];
@@ -449,7 +452,11 @@ function processSaveData(data) {
 
     if (!!species) {
         removeFilters();
-        populateTable('speciesTable', Object.values(species));
+        if (typeof refreshSpeciesResults === "function") {
+            refreshSpeciesResults();
+        } else {
+            populateTable('speciesTable', Object.values(species));
+        }
     }
 }
 

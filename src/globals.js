@@ -1,5 +1,5 @@
 let repo = "JwowSquared/Radical-Red-Pokedex";
-let version = "rrdex release 1.2.2";
+let version = "rrdex release 1.3.0";
 
 species = null;
 moves = null;
@@ -15,7 +15,7 @@ types = null;
 splits = null;
 evolutions = null;
 scaledLevels = null;
-capIDs = null;
+caps = null;
 sprites = null;
 saveData = null;
 

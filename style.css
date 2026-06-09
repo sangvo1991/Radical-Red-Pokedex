@@ -58,6 +58,14 @@ li:hover {
 	color: white;
 }
 
+#advancedSearchGuideContent {
+	color: white;
+}
+
+#advancedSearchGuideContent code {
+	color: #9ee7ff;
+}
+
 .modal-content {
 	background-color: #222222;
     user-select: none;
@@ -70,6 +78,109 @@ li:hover {
 	color: white;
     text-shadow: none;
 	float: right;
+}
+
+#advancedSearchControl {
+	width: min(50vw, 560px);
+	min-width: 320px;
+	color: white;
+	margin: 0 auto;
+	padding: 0 30px 15px 30px;
+}
+
+#advancedSearchControl label {
+	display: block;
+	margin-bottom: 4px;
+	text-align: center;
+	font-weight: 550;
+}
+
+#advancedSearchForm {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	justify-content: center;
+}
+
+#advancedSearchInput {
+	flex: 1 1 100%;
+	min-width: 0;
+}
+
+#advancedSearchStatus {
+	margin-top: 6px;
+	min-height: 20px;
+	text-align: center;
+}
+
+#advancedSearchStatus.error {
+	color: #ff9a9a;
+}
+
+#advancedSearchStatus.success {
+	color: #9de59d;
+}
+
+.infoHardcoreLabel,
+.infoHardcoreSubLabel,
+.infoItemsLabel,
+.coverageLabelWrapper,
+.infoTreeEvoLabel,
+.infoTreeFormsLabel,
+.infoChangelogLabel {
+	margin-top: 10px;
+	font-weight: 700;
+}
+
+.infoHardcoreMoveList,
+.infoHardcoreAbility {
+	max-width: 500px;
+}
+
+.infoHardcoreMoveLegend {
+	max-width: 500px;
+}
+
+.hardcoreUnavailableMarker {
+	color: #ff4d4d !important;
+	font-weight: 700;
+	margin-left: 0.2rem;
+}
+
+.hardcoreUnavailableMoveName {
+	color: #b7b7b7;
+}
+
+.customTooltipButton {
+	position: relative;
+}
+
+.customTooltipButton::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	left: 50%;
+	top: calc(100% + 8px);
+	transform: translateX(-50%);
+	background: rgba(20, 20, 20, 0.96);
+	color: white;
+	border: 1px solid #666;
+	border-radius: 4px;
+	padding: 0.35rem 0.55rem;
+	font-size: 1rem;
+	font-weight: 600;
+	line-height: 1.2;
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	z-index: 5;
+	transition: opacity 0s linear;
+	transition-delay: 0s;
+}
+
+.customTooltipButton:hover::after,
+.customTooltipButton:focus::after {
+	opacity: 1;
+	transition-delay: 0.5s;
 }
 
 #speciesPanelInfoDisplay {
@@ -327,7 +438,7 @@ li:hover {
     justify-content: center;
 }
 
-#speciesFilterInput, #speciesFilterCategory, #speciesFilterSeparator, #saveFileInputButton, #clearCurrentSave {
+#speciesFilterInput, #speciesFilterCategory, #speciesFilterSeparator, #saveFileInputButton, #clearCurrentSave, #advancedSearchInput, #advancedSearchButton, #advancedSearchClearButton, #advancedSearchGuideButton, #exportJsonButton, #showHelpButton {
 	display: block;
     padding: 0.2rem;
     border-radius: 3px;
@@ -363,8 +474,24 @@ li:hover {
     left: -1px;
 }
 
+#advancedSearchInput {
+	width: 100%;
+}
+
+#advancedSearchButton, #advancedSearchClearButton, #advancedSearchGuideButton {
+	min-width: 72px;
+	cursor: pointer;
+}
+
 #saveFileInput {
 	display: none;
+}
+
+@media only screen and (max-width: 767px) {
+	#advancedSearchControl {
+		width: calc(100% - 30px);
+		min-width: 0;
+	}
 }
 
 #activeFilters, #currentSave {
@@ -482,7 +609,7 @@ tbody {
 	cursor: auto;
 }
 
-.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, .activeFilter:hover {
+.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #exportJsonButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, .activeFilter:hover {
 	background: rgba(255, 255, 255, 0.075);
 }
 
@@ -597,6 +724,13 @@ td.speciesNameWrapper {
 td.moveNameWrapper {
 	text-align: center;
 	width: 100%;
+}
+
+.moveName {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.15rem;
 }
 
 td.moveTypeWrapper {

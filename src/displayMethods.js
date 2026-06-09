@@ -29,14 +29,15 @@ function displaySpeciesRow(tracker, mon) {
 }
 
 function displayLevelUpMovesRow(tracker, movePair) {
-	let [move, level] = movePair;
+	let move = movePair.move ?? movePair[0];
+	let level = movePair.level ?? movePair[1];
 	let currentRow = document.createElement('tr');
 	currentRow.className = 'movesRow';
 	tracker.body.appendChild(currentRow);
 	
 	currentRow.append(
 		buildWrapper('td', 'moveLevelWrapper', level),
-		buildWrapper('td', 'moveNameWrapper', move.name),
+		buildWrapperMoveName('td', 'moveName', move),
 		buildWrapperTypes('td', 'moveType', types[move.type]),
 		buildWrapperSprite('td', 'moveSplit', getSprite(splits[move.split])),
 		buildWrapper('td', 'movePowerWrapper', move.power),
@@ -46,12 +47,13 @@ function displayLevelUpMovesRow(tracker, movePair) {
 }
 
 function displayMovesRow(tracker, move) {
+	move = move.move ?? move;
 	let currentRow = document.createElement('tr');
 	currentRow.className = 'movesRow';
 	tracker.body.appendChild(currentRow);
 	
 	currentRow.append(
-		buildWrapper('td', 'moveNameWrapper', move.name),
+		buildWrapperMoveName('td', 'moveName', move),
 		buildWrapperTypes('td', 'moveType', types[move.type]),
 		buildWrapperSprite('td', 'moveSplit', getSprite(splits[move.split])),
 		buildWrapper('td', 'movePowerWrapper', move.power),
@@ -63,12 +65,12 @@ function displayMovesRow(tracker, move) {
 function displaySpeciesPanel(mon) {
 	let infoDisplay = document.getElementById('speciesPanelInfoDisplay');
 	let tables = [
-		['speciesLearnsetPrevoExclusiveTable', mon.prevoMoves?.map(x => getMove(x, mon.ID))],
-		['speciesLearnsetLevelUpTable', mon.levelupMoves?.map(x => [getMove(x[0], mon.ID), x[1]])],
-		['speciesLearnsetTMHMTable', mon.tmMoves?.map(x => getMove(tmMoves[x], mon.ID, true)).filter(x => x !== undefined)],
-		['speciesLearnsetTutorTable', mon.tutorMoves?.map(x => getMove(tutorMoves[x], mon.ID, true)).filter(x => x !== undefined)],
-		['speciesLearnsetEggMovesTable', mon.eggMoves?.map(x => getMove(x, mon.ID, true))],
-		['speciesLearnsetEventTable', mon.eventMoves?.map(x => getMove(x, mon.ID, true))],
+		['speciesLearnsetPrevoExclusiveTable', mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x))],
+		['speciesLearnsetLevelUpTable', mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1]))],
+		['speciesLearnsetTMHMTable', mon.tmMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tmMoves[x], null, true)).filter(x => x !== undefined)],
+		['speciesLearnsetTutorTable', mon.tutorMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tutorMoves[x], null, true)).filter(x => x !== undefined)],
+		['speciesLearnsetEggMovesTable', mon.eggMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
+		['speciesLearnsetEventTable', mon.eventMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
 	]
 	
 	infoDisplay.innerText = '';
@@ -97,6 +99,7 @@ function displaySpeciesPanel(mon) {
 		buildWrapperChangelog('div', 'infoChangelog', mon),
 		buildWrapperFamilyTree('div', 'infoFamilyTree', mon),
 		buildWrapperCoverageDefensive('div', 'infoCoverage', mon.type[0], mon.type[1]),
+		buildWrapperHardcoreSummary('div', 'infoHardcore', mon),
 		//buildWrapperCap('div', 'infoCap', mon.ID),
 		buildWrapperHeldItems('div', 'infoItems', mon.items),
 		//buildWrapperEggGroups('div', 'infoEggGroups', mon.eggGroup),
@@ -122,6 +125,24 @@ function buildWrapper(tag, className, text=null) {
 	if (text === 0)
 		wrapper.textContent = '-';
 	
+	return wrapper;
+}
+
+function buildWrapperMoveName(tag, className, move) {
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	let nameWrapper = buildWrapper('div', className);
+	if (move.hardcoreUnavailable)
+		nameWrapper.classList.add('hardcoreUnavailableMoveName');
+	nameWrapper.append(document.createTextNode(move.name));
+
+	if (move.hardcoreUnavailable) {
+		let marker = buildWrapper('span', 'hardcoreUnavailableMarker', '★');
+		marker.title = 'Not available in Hardcore';
+		nameWrapper.append(marker);
+	}
+
+	wrapper.append(nameWrapper);
+
 	return wrapper;
 }
 
@@ -449,6 +470,31 @@ function buildWrapperHeldItems(tag, className, i) {
 	if (i[1])
 		wrapper.append(buildWrapper('div', className, 'Rare: ' + items[i[1]].name));
 	
+	return wrapper;
+}
+
+function buildWrapperHardcoreSummary(tag, className, mon) {
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	let hardcoreAbilities = getSpeciesAbilityPackage(mon, true);
+
+	wrapper.append(buildWrapper('div', 'infoHardcoreLabel', 'Hardcore Mode'));
+
+	if (hardcoreAbilities.length > 0) {
+		wrapper.append(buildWrapper('div', 'infoHardcoreSubLabel', 'Ability Changes'));
+		for (const ability of hardcoreAbilities) {
+			let text = `${ability.slot}: ${ability.name}`;
+			if (ability.changedForHardcore)
+				text = `${ability.slot}: ${ability.mappedName} → ${ability.name}`;
+			wrapper.append(buildWrapper('div', 'infoHardcoreAbility', text));
+		}
+	}
+
+	let legend = buildWrapper('div', 'infoHardcoreMoveLegend');
+	let marker = buildWrapper('span', 'hardcoreUnavailableMarker', '★');
+	legend.append(marker);
+	legend.append(document.createTextNode(' is not available in Hardcore.'));
+	wrapper.append(legend);
+
 	return wrapper;
 }
 

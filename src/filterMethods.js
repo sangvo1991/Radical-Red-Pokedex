@@ -26,7 +26,7 @@ function setupFilters() {
 	);
 	
 	buildFilter('Ability', 3, Object.values(abilities),
-		o => o.names[0], //make alternate names filterable eventually
+		o => getAbilityDisplayNameById(o.ID), //make alternate names filterable eventually
 		(x,o) => x.abilities
 			.map(y => getMappedAbility(y, x.ID))	
 			.find(y => y[0] == o.ID)
@@ -305,11 +305,7 @@ function addFilter(filter, option) {
 	};
 	activeFiltersDisplay.append(active.button);
 
-	let results = Object.values(species);
-	for (const a of Object.values(filters).reduce((list, x) => list.concat(x.active), [])) {
-		results = results.filter(a.func);
-	}
-	
+	let results = getFilteredSpeciesResults();
 	populateTable('speciesTable', results);
 
 	if (results.length === 1) {//&& filter.name === 'Name') {
@@ -323,12 +319,7 @@ function removeFilter(filter, active) {
 
 	filter.active.splice(filter.active.findIndex(x => x.option == active.option), 1);
 
-	let results = Object.values(species);
-	for (const a of Object.values(filters).reduce((list, x) => list.concat(x.active), [])) {
-		results = results.filter(a.func);
-	}
-	
-	populateTable('speciesTable', results);
+	populateTable('speciesTable', getFilteredSpeciesResults());
 }
 
 function removeFilters() {
@@ -336,4 +327,5 @@ function removeFilters() {
 		filter.active.forEach(active => active.button.remove());
 		filter.active = [];
 	});
+	refreshSpeciesResults();
 }

@@ -97,10 +97,40 @@
 				</div>
 			</div>
 		</div>
+		<div class="modal fade" id="advancedSearchGuideModal" tabindex="-1" role="dialog" aria-labelledby="Advanced Search Guide" aria-hidden="true">
+			<div class="modal-dialog" role="document">
+				<div class="modal-content">
+					<div class="modal-body">
+						<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+							<span aria-hidden="true">&times;</span>
+						</button>
+						<div id="advancedSearchGuideContent">
+							<h1>Advanced Search Guide</h1>
+							<p>Use boolean expressions with parentheses, <b>and</b>, and <b>or</b>.</p>
+							<p><code>(bst &gt;= 600 and type = dragon)</code></p>
+							<p><code>(atk &lt; 100 and type = fairy)</code></p>
+							<p><code>(moveset has ('counter', 'mirror coat'))</code></p>
+							<p><b>Number attributes</b>: <code>hp</code>, <code>atk</code>, <code>def</code>, <code>spa</code>, <code>spatk</code>, <code>spd</code>, <code>spdef</code>, <code>spe</code>, <code>speed</code>, <code>bst</code>, <code>dex</code>, <code>dexid</code>.</p>
+							<p><b>String attributes</b>: <code>name</code>. Use <code>=</code> for exact match and <code>has</code>/<code>have</code> for substring match.</p>
+							<p><b>List attributes</b>: <code>type</code>, <code>types</code>, <code>ability</code>, <code>abilities</code>, <code>moveset</code>, <code>moves</code>, <code>move</code>, <code>evolution</code>, <code>evolutions</code>, <code>item</code>, <code>items</code>, <code>egggroup</code>, <code>egggroups</code>.</p>
+							<p><b>Hardcore-aware list attributes</b>: <code>hardcoreability</code>, <code>hardcoreabilities</code>, <code>hardcoremove</code>, <code>hardcoremoves</code>, <code>hardcoremoveset</code>.</p>
+							<p>Attribute names are case-insensitive, so <code>BST</code>, <code>bst</code>, <code>ATK</code>, and <code>atk</code> all work.</p>
+							<p>For list attributes, <code>=</code> and <code>has</code>/<code>have</code> both mean the Pokemon must contain the requested entry. Comparing against a tuple means it must contain every listed value.</p>
+							<p><code>name has 'dra'</code></p>
+							<p><code>ability = 'as one'</code></p>
+							<p><code>hardcoreabilities = infiltrator</code></p>
+							<p><code>moveset = tackle</code></p>
+							<p><code>moveset has ('stealth rock', 'spikes')</code></p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
 
 		<div id="headingWrapper">
 			<div id="credit" style="color: white">Inspired by Ydarissep</div>
 			<button id="showHelpButton" onclick="displayHelp()">Help</button>
+			<button id="exportJsonButton" class="customTooltipButton" data-tooltip="For any randomizer run analyzing" onclick="exportPokemonData()">Export JSON</button>
 			<div id="saveWrapper">
 				<div id="currentSave" class="hide">
 					<span>Current Save:</span>
@@ -128,6 +158,16 @@
 					</ul>
 				</div>
 			</div>
+			<div id="advancedSearchControl">
+				<label for="advancedSearchInput">Advanced Search</label>
+				<div id="advancedSearchForm">
+					<input type="text" autocomplete="off" id="advancedSearchInput" placeholder="Example: (bst >= 600 and type = dragon)">
+					<button id="advancedSearchButton" type="button" onclick="runAdvancedSearch()">Search</button>
+					<button id="advancedSearchClearButton" type="button" onclick="clearAdvancedSearch()">Clear</button>
+					<button id="advancedSearchGuideButton" type="button" onclick="showAdvancedSearchGuide()">Guide</button>
+				</div>
+				<div id="advancedSearchStatus"></div>
+			</div>
 			<div id="activeFilters">
 			</div>
 		</div>
@@ -142,6 +182,7 @@
 	<script src="src/filterMethods.js"></script>
 	<script src="src/utility.js"></script>
 	<script src="src/abilityRandomizer.js"></script>
+	<script src="src/advancedFeatures.js"></script>
 	<script src="src/onStartUp.js"></script>
 	<!-- jQuery first, then Popper.js, then Bootstrap JS -->
 	<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
