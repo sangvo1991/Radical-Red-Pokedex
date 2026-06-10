@@ -378,7 +378,14 @@ function renderAdvancedSearchAutocomplete() {
 	}
 }
 
+function normalizeAdvancedSearchInput(input) {
+	return String(input ?? '')
+		.replace(/[\u2018\u2019\u201A\u201B]/g, '\'')
+		.replace(/[\u201C\u201D\u201E\u201F]/g, '"');
+}
+
 function tokenizeAdvancedSearchPartial(input) {
+	input = normalizeAdvancedSearchInput(input);
 	const tokens = [];
 	let index = 0;
 
@@ -1349,6 +1356,7 @@ function buildSpeciesSearchRecord(mon) {
 }
 
 function tokenizeAdvancedSearch(input) {
+	input = normalizeAdvancedSearchInput(input);
 	const tokens = [];
 	let index = 0;
 
