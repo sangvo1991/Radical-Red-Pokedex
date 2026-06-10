@@ -102,6 +102,28 @@ li:hover {
 	justify-content: center;
 }
 
+#advancedSearchActions {
+	width: 100%;
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	opacity: 0;
+	transform: translateY(-10px);
+	transition: opacity 0.1s ease, transform 0.1s ease;
+}
+
+#advancedSearchActions.visible {
+	opacity: 1;
+	transform: translateY(0);
+}
+
+#advancedSearchActions > button {
+	display: inline-block;
+	flex: 0 0 auto;
+}
+
 #advancedSearchInputWrapper {
 	flex: 1 1 100%;
 	min-width: 0;

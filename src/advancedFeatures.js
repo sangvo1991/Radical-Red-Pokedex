@@ -75,6 +75,8 @@ let abilityPackageCache = {
 let advancedSearchAutocompleteMetadata = null;
 let advancedSearchAutocompleteSuggestions = [];
 let advancedSearchAutocompleteIndex = -1;
+let advancedSearchActionsHideTimer = null;
+let advancedSearchActionsVisibilityTimer = null;
 
 function resetAdvancedFeatureCaches() {
 	speciesSearchCache = new Map();
@@ -192,13 +194,59 @@ function setupAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
 	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
 	const wrapper = document.getElementById('advancedSearchInputWrapper');
-	if (!input || !dropdown || !wrapper) {
+	const form = document.getElementById('advancedSearchForm');
+	const actions = document.getElementById('advancedSearchActions');
+	if (!input || !dropdown || !wrapper || !form || !actions) {
 		return;
 	}
 
 	buildAdvancedSearchAutocompleteMetadata();
 
+	const showAdvancedSearchActions = function() {
+		if (advancedSearchActionsHideTimer) {
+			clearTimeout(advancedSearchActionsHideTimer);
+			advancedSearchActionsHideTimer = null;
+		}
+		if (advancedSearchActionsVisibilityTimer) {
+			clearTimeout(advancedSearchActionsVisibilityTimer);
+			advancedSearchActionsVisibilityTimer = null;
+		}
+
+		if (actions.classList.contains('hide')) {
+			actions.classList.remove('hide');
+			actions.classList.remove('visible');
+			requestAnimationFrame(function() {
+				actions.classList.add('visible');
+			});
+			return;
+		}
+
+		actions.classList.add('visible');
+	};
+
+	const scheduleHideAdvancedSearchActions = function() {
+		if (advancedSearchActionsHideTimer) {
+			clearTimeout(advancedSearchActionsHideTimer);
+		}
+
+		advancedSearchActionsHideTimer = setTimeout(function() {
+			advancedSearchActionsHideTimer = null;
+			if (document.activeElement === input || form.matches(':hover')) {
+				return;
+			}
+			actions.classList.remove('visible');
+			advancedSearchActionsVisibilityTimer = setTimeout(function() {
+				advancedSearchActionsVisibilityTimer = null;
+				if (!actions.classList.contains('visible')) {
+					actions.classList.add('hide');
+				}
+			}, 100);
+		}, 700);
+	};
+
 	input.addEventListener('keydown', function(event) {
+		showAdvancedSearchActions();
+
 		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 			if (advancedSearchAutocompleteSuggestions.length) {
 				event.preventDefault();
@@ -226,9 +274,22 @@ function setupAdvancedSearch() {
 		}
 	});
 
-	input.addEventListener('input', refreshAdvancedSearchAutocomplete);
-	input.addEventListener('click', refreshAdvancedSearchAutocomplete);
-	input.addEventListener('focus', refreshAdvancedSearchAutocomplete);
+	input.addEventListener('input', function() {
+		showAdvancedSearchActions();
+		refreshAdvancedSearchAutocomplete();
+	});
+	input.addEventListener('click', function() {
+		showAdvancedSearchActions();
+		refreshAdvancedSearchAutocomplete();
+	});
+	input.addEventListener('focus', function() {
+		showAdvancedSearchActions();
+		refreshAdvancedSearchAutocomplete();
+	});
+	input.addEventListener('blur', scheduleHideAdvancedSearchActions);
+	wrapper.addEventListener('mouseenter', showAdvancedSearchActions);
+	form.addEventListener('mouseenter', showAdvancedSearchActions);
+	form.addEventListener('mouseleave', scheduleHideAdvancedSearchActions);
 
 	document.addEventListener('mousedown', function(event) {
 		if (!wrapper.contains(event.target)) {
@@ -418,6 +479,60 @@ function isAdvancedSearchOperatorToken(token) {
 		token.type === 'operator' ||
 		(token.type === 'word' && ['has', 'have'].includes(token.value.toLowerCase()))
 	);
+}
+
+function buildImplicitNameSearchAst(query) {
+	return {
+		type: 'comparison',
+		attribute: 'name',
+		operator: 'has',
+		value: query
+	};
+}
+
+function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
+	const query = input.trim();
+	if (!query) {
+		return null;
+	}
+
+	if (cursorIndex !== input.length) {
+		return null;
+	}
+
+	if (/[(),=<>!'"]/.test(input)) {
+		return null;
+	}
+
+	const tokens = tokenizeAdvancedSearchPartial(input);
+	if (tokens.some(token => ['operator', '(', ')', ',', 'unknown'].includes(token.type))) {
+		return null;
+	}
+
+	if (tokens.some(token => token.type === 'word' && ['and', 'or', 'has', 'have'].includes(token.value.toLowerCase()))) {
+		return null;
+	}
+
+	const metadata = buildAdvancedSearchAutocompleteMetadata();
+	const exactAttribute = metadata.byName[normalizeSearchKey(query)];
+	if (exactAttribute && /\s$/.test(input)) {
+		return null;
+	}
+
+	return {
+		fragment: query,
+		rangeStart: 0,
+		rangeEnd: input.length
+	};
+}
+
+function parseAdvancedSearchWithFallback(query) {
+	try {
+		return parseAdvancedSearch(query);
+	}
+	catch {
+		return buildImplicitNameSearchAst(query);
+	}
 }
 
 function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentAttribute, stack, metadata) {
@@ -649,6 +764,10 @@ function filterAdvancedSearchSuggestions(suggestions, fragment) {
 
 	return matches
 		.sort((left, right) => {
+			const priorityDiff = (left.priority || 0) - (right.priority || 0);
+			if (priorityDiff !== 0) {
+				return priorityDiff;
+			}
 			const scoreDiff = scoreAdvancedSearchSuggestion(left, fragment) - scoreAdvancedSearchSuggestion(right, fragment);
 			if (scoreDiff !== 0) {
 				return scoreDiff;
@@ -685,6 +804,30 @@ function buildAdvancedSearchValueSuggestions(attribute) {
 }
 
 function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
+	const plainNameContext = getPlainNameSearchAutocompleteContext(input, cursorIndex);
+	if (plainNameContext) {
+		const metadata = buildAdvancedSearchAutocompleteMetadata();
+		return filterAdvancedSearchSuggestions(
+			[
+				...metadata.byName.name.values.map(name => ({
+					label: name,
+					insertText: name,
+					meta: 'pokemon',
+					category: 'pokemonNameSearch',
+					priority: 0
+				})),
+				...metadata.attributes.map(attribute => ({
+					label: attribute.name,
+					insertText: attribute.name,
+					meta: attribute.kind,
+					category: 'attribute',
+					priority: 1
+				}))
+			],
+			plainNameContext.fragment
+		);
+	}
+
 	const context = getAdvancedSearchAutocompleteContext(input, cursorIndex);
 	if (!context || (context.activeToken && context.activeToken.type === 'unknown')) {
 		return [];
@@ -748,6 +891,18 @@ function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
 	}
 
 	const cursorIndex = input.selectionStart ?? input.value.length;
+	const plainNameContext = getPlainNameSearchAutocompleteContext(input.value, cursorIndex);
+	if (plainNameContext && suggestion.category === 'pokemonNameSearch') {
+		input.value =
+			input.value.slice(0, plainNameContext.rangeStart) +
+			suggestion.insertText +
+			input.value.slice(plainNameContext.rangeEnd);
+		input.focus();
+		input.setSelectionRange(suggestion.insertText.length, suggestion.insertText.length);
+		refreshAdvancedSearchAutocomplete();
+		return;
+	}
+
 	const context = getAdvancedSearchAutocompleteContext(input.value, cursorIndex);
 	if (!context) {
 		return;
@@ -866,7 +1021,7 @@ function runAdvancedSearch() {
 	}
 
 	try {
-		const ast = parseAdvancedSearch(query);
+		const ast = parseAdvancedSearchWithFallback(query);
 		const predicate = mon => evaluateAdvancedSearch(ast, mon);
 		predicate(Object.values(species)[0]);
 		advancedSearchPredicate = predicate;

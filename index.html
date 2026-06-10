@@ -165,9 +165,11 @@
 						<input type="text" autocomplete="off" id="advancedSearchInput" placeholder="Example: (bst >= 600 and type = dragon)">
 						<ul id="advancedSearchAutocompleteDropdown" class="hide"></ul>
 					</div>
-					<button id="advancedSearchButton" type="button" onclick="runAdvancedSearch()">Search</button>
-					<button id="advancedSearchClearButton" type="button" onclick="clearAdvancedSearch()">Clear</button>
-					<button id="advancedSearchGuideButton" type="button" onclick="showAdvancedSearchGuide()">Guide</button>
+					<div id="advancedSearchActions" class="hide">
+						<button id="advancedSearchButton" type="button" onclick="runAdvancedSearch()">Search</button>
+						<button id="advancedSearchClearButton" type="button" onclick="clearAdvancedSearch()">Clear</button>
+						<button id="advancedSearchGuideButton" type="button" onclick="showAdvancedSearchGuide()">Guide</button>
+					</div>
 				</div>
 				<div id="advancedSearchStatus"></div>
 			</div>
