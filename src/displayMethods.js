@@ -29,8 +29,8 @@ function displaySpeciesRow(tracker, mon) {
 }
 
 function displayLevelUpMovesRow(tracker, movePair) {
-	let move = movePair.move ?? movePair[0];
-	let level = movePair.level ?? movePair[1];
+	let move = movePair?.move ?? movePair?.[0] ?? movePair;
+	let level = movePair?.level ?? movePair?.[1];
 	let currentRow = document.createElement('tr');
 	currentRow.className = 'movesRow';
 	tracker.body.appendChild(currentRow);
@@ -64,13 +64,14 @@ function displayMovesRow(tracker, move) {
 
 function displaySpeciesPanel(mon, saveEntry = null) {
 	let infoDisplay = document.getElementById('speciesPanelInfoDisplay');
+	const filterMoveEntries = entries => entries?.filter(entry => entry !== undefined) || [];
 	let tables = [
-		['speciesLearnsetPrevoExclusiveTable', mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x))],
-		['speciesLearnsetLevelUpTable', mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1]))],
-		['speciesLearnsetTMHMTable', mon.tmMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tmMoves[x], null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetTutorTable', mon.tutorMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tutorMoves[x], null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetEggMovesTable', mon.eggMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetEventTable', mon.eventMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
+		['speciesLearnsetPrevoExclusiveTable', filterMoveEntries(mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x)))],
+		['speciesLearnsetLevelUpTable', filterMoveEntries(mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1])))],
+		['speciesLearnsetTMHMTable', filterMoveEntries(mon.tmMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tmMoves[x], null, true)))],
+		['speciesLearnsetTutorTable', filterMoveEntries(mon.tutorMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tutorMoves[x], null, true)))],
+		['speciesLearnsetEggMovesTable', filterMoveEntries(mon.eggMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)))],
+		['speciesLearnsetEventTable', filterMoveEntries(mon.eventMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)))],
 	]
 	
 	infoDisplay.innerText = '';
@@ -109,10 +110,13 @@ function displaySpeciesPanel(mon, saveEntry = null) {
 	for (const [ID, data] of tables) {
 		let table = document.getElementById(ID);
 		table.className = 'tableWrapper';
-		if (data && data.length > 0)
+		if (data.length > 0) {
+			table.classList.remove('hide');
 			populateTable(ID, data);
-		else
-			table.classList.toggle('hide');
+		}
+		else {
+			table.classList.add('hide');
+		}
 	}
 
 	$('#speciesModal').modal('show');
