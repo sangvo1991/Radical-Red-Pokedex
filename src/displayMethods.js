@@ -104,6 +104,7 @@ function displaySpeciesPanel(mon, saveEntry = null) {
 		buildWrapperCoverageDefensive('div', 'infoCoverage', mon.type[0], mon.type[1]),
 		buildWrapperHardcoreSummary('div', 'infoHardcore', mon),
 		buildWrapperHeldItems('div', 'infoItems', mon.items),
+		buildWrapperOriginalSpeciesDetail('div', 'infoOriginalSpecies', mon),
 		//buildWrapperEggGroups('div', 'infoEggGroups', mon.eggGroup),
 	);
 
@@ -458,21 +459,30 @@ function buildWrapperTypeMatchup(type, matchup) {
 
 let speciesLocationIndexCache = null;
 let randomizedSpeciesLocationCache = new Map();
+let randomizedSpeciesOriginalCache = new Map();
 const RANDOMIZER_LOCATION_FALLBACK_SPECIES_ID = 132;
 
 function collectSpeciesIdsFromEncounterValue(value, speciesIds) {
 	if (Array.isArray(value)) {
-		if (value.length > 0 && value.every(entry => typeof entry === 'number')) {
-			const looksLikeEncounterTuple =
-				value.length <= 3 &&
-				value[0] > 0 &&
-				value[0] <= 1375 &&
-				value.slice(1).every(level => level >= 0 && level <= 100);
-			if (looksLikeEncounterTuple) {
-				speciesIds.add(value[0]);
-				return;
-			}
+		const looksLikeEncounterTuple =
+			value.length > 0 &&
+			value.length <= 3 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= 1375 &&
+			value.slice(1).every(level => typeof level === 'number' && level >= 0 && level <= 100);
+		const looksLikeRaidTuple =
+			value.length === 2 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= 1375 &&
+			Array.isArray(value[1]);
+		if (looksLikeEncounterTuple || looksLikeRaidTuple) {
+			speciesIds.add(value[0]);
+			return;
+		}
 
+		if (value.length > 0 && value.every(entry => typeof entry === 'number')) {
 			for (const entry of value) {
 				if (entry > 0 && entry <= 1375) {
 					speciesIds.add(entry);
@@ -494,38 +504,133 @@ function collectSpeciesIdsFromEncounterValue(value, speciesIds) {
 	}
 }
 
+function isIndexedLocationBucket(bucket) {
+	return bucket !== 'name' &&
+		(bucket.includes('wild') || bucket.includes('fixed') || bucket.startsWith('raid'));
+}
+
+function formatSpeciesLocationName(areaName, bucket) {
+	if (!bucket.startsWith('raid')) {
+		return areaName;
+	}
+
+	const starMatch = bucket.match(/^raid(\d+)$/);
+	if (!starMatch) {
+		return `${areaName} Raid Dens`;
+	}
+
+	return `${areaName} Raid Dens (${Number(starMatch[1])}-star)`;
+}
+
+function buildSpeciesLocationEntry(areaId, areaName, bucket, customName = null) {
+	const normalizedAreaId = Number.isFinite(Number(areaId)) ? Number(areaId) : -1;
+	const name = customName || formatSpeciesLocationName(areaName, bucket);
+	return {
+		key: `${normalizedAreaId}:${name}`,
+		areaId: normalizedAreaId,
+		areaName,
+		name,
+	};
+}
+
+function addLocationEntry(locationIndex, speciesId, locationEntry) {
+	if (!locationIndex.has(speciesId)) {
+		locationIndex.set(speciesId, new Map());
+	}
+	locationIndex.get(speciesId).set(locationEntry.key, locationEntry);
+}
+
+function getLocationMetadataGroup(groupName) {
+	if (typeof LOCATION_METADATA !== 'object' || !LOCATION_METADATA) {
+		return [];
+	}
+
+	const group = LOCATION_METADATA[groupName];
+	return Array.isArray(group) ? group : [];
+}
+
+function applyGiftLocationMetadata(locationIndex) {
+	for (const giftEntry of getLocationMetadataGroup('gifts')) {
+		if (!giftEntry || typeof giftEntry.speciesId !== 'number') {
+			continue;
+		}
+
+		const matchAreaNames = Array.isArray(giftEntry.matchAreaNames)
+			? giftEntry.matchAreaNames
+			: [];
+		let matchedExistingLocation = false;
+		const speciesLocations = locationIndex.get(giftEntry.speciesId);
+		if (speciesLocations) {
+			for (const [key, location] of Array.from(speciesLocations.entries())) {
+				if (!matchAreaNames.includes(location.areaName)) {
+					continue;
+				}
+
+				const updatedLocation = buildSpeciesLocationEntry(
+					location.areaId,
+					location.areaName,
+					giftEntry.bucket || 'fixed-gift',
+					giftEntry.displayName
+				);
+				speciesLocations.delete(key);
+				speciesLocations.set(updatedLocation.key, updatedLocation);
+				matchedExistingLocation = true;
+			}
+		}
+
+		if (!matchedExistingLocation && giftEntry.areaName) {
+			addLocationEntry(
+				locationIndex,
+				giftEntry.speciesId,
+				buildSpeciesLocationEntry(
+					giftEntry.areaId,
+					giftEntry.areaName,
+					giftEntry.bucket || 'fixed-gift',
+					giftEntry.displayName
+				)
+			);
+		}
+	}
+}
+
 function getSpeciesLocationIndex() {
 	if (speciesLocationIndexCache) {
 		return speciesLocationIndexCache;
 	}
 
-	speciesLocationIndexCache = new Map();
+	const locationIndex = new Map();
 	if (!areas) {
+		speciesLocationIndexCache = locationIndex;
 		return speciesLocationIndexCache;
 	}
 
 	for (const [areaId, area] of Object.entries(areas)) {
-		const encounteredSpeciesIds = new Set();
+		const areaName = area.name || `Area ${areaId}`;
 		for (const [bucket, value] of Object.entries(area)) {
-			if (bucket === 'name' || (!bucket.includes('wild') && !bucket.includes('fixed'))) {
+			if (!isIndexedLocationBucket(bucket)) {
 				continue;
 			}
-			collectSpeciesIdsFromEncounterValue(value, encounteredSpeciesIds);
-		}
 
-		for (const speciesId of encounteredSpeciesIds) {
-			if (!speciesLocationIndexCache.has(speciesId)) {
-				speciesLocationIndexCache.set(speciesId, []);
+			const encounteredSpeciesIds = new Set();
+			collectSpeciesIdsFromEncounterValue(value, encounteredSpeciesIds);
+			const locationEntry = buildSpeciesLocationEntry(areaId, areaName, bucket);
+			for (const speciesId of encounteredSpeciesIds) {
+				addLocationEntry(locationIndex, speciesId, locationEntry);
 			}
-			speciesLocationIndexCache.get(speciesId).push({
-				areaId: Number(areaId),
-				name: area.name || `Area ${areaId}`,
-			});
 		}
 	}
 
-	for (const locationList of speciesLocationIndexCache.values()) {
-		locationList.sort((a, b) => a.name.localeCompare(b.name) || a.areaId - b.areaId);
+	applyGiftLocationMetadata(locationIndex);
+
+	speciesLocationIndexCache = new Map();
+	for (const [speciesId, locationMap] of locationIndex.entries()) {
+		const locationList = Array.from(locationMap.values())
+			.sort((a, b) =>
+				a.areaName.localeCompare(b.areaName) ||
+				a.areaId - b.areaId ||
+				a.name.localeCompare(b.name)
+			);
+		speciesLocationIndexCache.set(speciesId, locationList);
 	}
 
 	return speciesLocationIndexCache;
@@ -537,6 +642,7 @@ function getDirectSpeciesAreas(ID) {
 
 function resetDisplayLocationCaches() {
 	randomizedSpeciesLocationCache.clear();
+	randomizedSpeciesOriginalCache.clear();
 }
 
 function getRandomizerSpeciesPoolKey() {
@@ -602,14 +708,70 @@ function getRandomizedSpeciesAreas(ID) {
 		}
 
 		for (const location of locations) {
-			mergedAreas.set(location.areaId, location);
+			mergedAreas.set(location.key || `${location.areaId}:${location.name}`, location);
 		}
 	}
 
 	const mappedAreas = Array.from(mergedAreas.values())
-		.sort((a, b) => a.name.localeCompare(b.name) || a.areaId - b.areaId);
+		.sort((a, b) =>
+			(a.areaName || a.name).localeCompare(b.areaName || b.name) ||
+			a.areaId - b.areaId ||
+			a.name.localeCompare(b.name)
+		);
 	randomizedSpeciesLocationCache.set(cacheKey, mappedAreas);
 	return mappedAreas;
+}
+
+function getRandomizedOriginalSpecies(ID) {
+	const trainedId = saveData?.trainedId;
+	const pool = getRandomizerSpeciesPool();
+	const poolKey = getRandomizerSpeciesPoolKey();
+	if (typeof trainedId !== 'number' || !Number.isFinite(trainedId) || !pool || !poolKey || !species) {
+		return [];
+	}
+
+	const cacheKey = `${trainedId}:${poolKey}:${ID}`;
+	if (randomizedSpeciesOriginalCache.has(cacheKey)) {
+		return randomizedSpeciesOriginalCache.get(cacheKey);
+	}
+
+	const originalSpecies = [];
+	for (const mon of Object.values(species)) {
+		if (!mon || typeof mon.ID !== 'number') {
+			continue;
+		}
+
+		if (mapSpeciesFromRandomizerPool(mon.ID, trainedId, pool) !== ID) {
+			continue;
+		}
+
+		originalSpecies.push(mon);
+	}
+
+	originalSpecies.sort((a, b) =>
+		(a.dexID || 0) - (b.dexID || 0) ||
+		a.key.localeCompare(b.key)
+	);
+	randomizedSpeciesOriginalCache.set(cacheKey, originalSpecies);
+	return originalSpecies;
+}
+
+function buildWrapperOriginalSpeciesDetail(tag, className, mon) {
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	if (!saveData?.random?.normalSpecies) {
+		return wrapper;
+	}
+
+	const originalSpecies = getRandomizedOriginalSpecies(mon.ID);
+	if (!originalSpecies.length) {
+		return wrapper;
+	}
+
+	const originalSpeciesText = originalSpecies
+		.map(originalMon => `${originalMon.key} (#${originalMon.dexID})`)
+		.join(', ');
+	wrapper.append(buildWrapper('div', className, `Original Pkm: ${originalSpeciesText}`));
+	return wrapper;
 }
 
 function buildWrapperCap(tag, className, ID) {
