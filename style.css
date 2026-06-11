@@ -180,6 +180,7 @@ li:hover {
 .infoHardcoreLabel,
 .infoHardcoreSubLabel,
 .infoItemsLabel,
+.infoCurrentMovesLabel,
 .coverageLabelWrapper,
 .infoTreeEvoLabel,
 .infoTreeFormsLabel,
@@ -189,8 +190,25 @@ li:hover {
 }
 
 .infoHardcoreMoveList,
-.infoHardcoreAbility {
+.infoHardcoreAbility,
+.infoCurrentMovesList {
 	max-width: 500px;
+}
+
+.infoCurrentMovesList {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+}
+
+.infoCurrentMoveWrapper {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.2rem 0.6rem;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.06);
 }
 
 .infoHardcoreMoveLegend {
@@ -600,6 +618,37 @@ li:hover {
 	display: none;
 }
 
+#currentSavePokemon {
+	width: min(900px, 100%);
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	color: rgba(255, 255, 255, 0.8);
+}
+
+#currentSavePokemon.hide {
+	display: none;
+}
+
+#currentSavePokemon details {
+	width: 100%;
+	padding: 0.45rem 0.6rem;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 6px;
+	background: rgba(0, 0, 0, 0.12);
+	text-align: left;
+}
+
+#currentSavePokemon summary {
+	cursor: pointer;
+	color: white;
+	font-weight: 600;
+}
+
+#currentSavePokemon summary span {
+	color: rgba(255, 255, 255, 0.7);
+}
+
 #currentSaveName {
 	color: white;
 	font-weight: 500;
@@ -667,6 +716,130 @@ tbody {
 
 .active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #exportJsonButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, .activeFilter:hover {
 	background: rgba(255, 255, 255, 0.075);
+}
+
+.savePokemonList {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-top: 0.55rem;
+}
+
+.savePokemonChip {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.18rem 0.5rem;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.07);
+	color: white;
+	font-size: 0.95rem;
+	line-height: 1.3;
+}
+
+.savePokemonChipInteractive {
+	cursor: pointer;
+	transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+
+.savePokemonChipInteractive:hover {
+	background: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.28);
+	transform: translateY(-1px);
+}
+
+.saveBoxSection + .saveBoxSection {
+	margin-top: 0.6rem;
+}
+
+.saveBoxTitle {
+	display: block;
+	color: white;
+	font-weight: 600;
+}
+
+#teamPageContent {
+	max-width: 1200px;
+	margin: 0 auto 32px auto;
+	padding: 0 20px;
+}
+
+#teamPageSummary {
+	color: rgba(255, 255, 255, 0.85);
+	text-align: center;
+	margin-bottom: 18px;
+}
+
+#teamPageEmptyState {
+	max-width: 700px;
+	margin: 24px auto 0 auto;
+	padding: 18px 20px;
+	text-align: center;
+	color: rgba(255, 255, 255, 0.85);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.teamCurrentMoves {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	justify-content: center;
+}
+
+.teamCurrentMove {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.18rem 0.5rem;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	color: rgba(255, 255, 255, 0.88);
+	font-size: 0.82rem;
+}
+
+.teamSpeciesRow {
+	height: auto;
+}
+
+.teamSpeciesName {
+	font-weight: 700;
+}
+
+.teamSpeciesNickname {
+	margin-top: 4px;
+	color: rgba(255, 255, 255, 0.7);
+	font-size: 0.88rem;
+	font-style: italic;
+}
+
+.teamCurrentMovesCellWrapper {
+	min-width: 260px;
+}
+
+#teamTable.hide {
+	display: none;
+}
+
+#teamTable {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
+#teamTable .table {
+	min-width: 1280px;
+}
+
+#teamTable .sortLocked:last-of-type,
+#teamTable .sortOption:last-of-type {
+	min-width: 260px;
+}
+
+@media (max-width: 700px) {
+	#teamPageContent {
+		padding: 0 14px;
+	}
 }
 
 .sortAscending::before {
@@ -897,6 +1070,103 @@ td.moveDescriptionWrapper {
 	.speciesStatWrapper {
 		width: 14%;
 	}
+
+	#teamTable tbody {
+		scroll-margin-top: 67px;
+	}
+
+	#teamTable .table {
+		min-width: 0;
+	}
+
+	#teamTable .sortLocked {
+		display: none;
+	}
+
+	#teamTable .table td {
+		border: none;
+	}
+
+	#teamTable .sortControls {
+		display: -webkit-box;
+		display: -moz-box;
+		display: -ms-flexbox;
+		display: -webkit-flex;
+		display: flex;
+		flex-wrap: wrap;
+	}
+
+	#teamTable .sortOption {
+		width: 20%;
+		border: none;
+	}
+
+	#teamTable th:nth-of-type(1),
+	#teamTable th:nth-of-type(3),
+	#teamTable th:nth-of-type(5) {
+		width: 33.33%;
+	}
+
+	#teamTable .teamSpeciesRow {
+		position: relative;
+		height: fit-content;
+		height: -moz-max-content;
+		display: -webkit-box;
+		display: -moz-box;
+		display: -ms-flexbox;
+		display: -webkit-flex;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		border-top: solid thin #757575;
+	}
+
+	#teamTable .speciesDexIDWrapper {
+		position: absolute;
+		left: 21%;
+		top: 12%;
+	}
+
+	#teamTable .speciesSpriteWrapper,
+	#teamTable .speciesNameWrapper,
+	#teamTable .speciesTypesWrapper {
+		width: 33%;
+	}
+
+	#teamTable td.speciesNameWrapper {
+		display: -webkit-box;
+		display: -moz-box;
+		display: -ms-flexbox;
+		display: -webkit-flex;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+
+	#teamTable .speciesAbilitiesWrapper {
+		width: 100%;
+		display: -webkit-box;
+		display: -moz-box;
+		display: -ms-flexbox;
+		display: -webkit-flex;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-evenly;
+		gap: 4px 12px;
+	}
+
+	#teamTable .speciesStatWrapper {
+		width: 14%;
+	}
+
+	#teamTable .teamCurrentMovesCellWrapper {
+		width: 100%;
+		margin-top: 8px;
+	}
+
+	#teamTable .teamCurrentMoves {
+		justify-content: flex-start;
+	}
 }
 
 @media (max-width: 399.98px) {
@@ -920,5 +1190,27 @@ td.moveDescriptionWrapper {
 	#clearCurrentSave {
 		margin-top: 8px;
 		padding: 0.2rem 4rem;
+	}
+
+	#teamTable .sortOption {
+		width: 25%;
+	}
+
+	#teamTable .speciesDexIDWrapper {
+		left: 24%;
+		top: 10%;
+	}
+
+	#teamTable .speciesSpriteWrapper,
+	#teamTable .speciesNameWrapper {
+		width: 50%;
+	}
+
+	#teamTable .speciesTypesWrapper {
+		width: 100%;
+	}
+
+	#teamTable .speciesStatWrapper {
+		width: 25%;
 	}
 }

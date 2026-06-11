@@ -33,6 +33,10 @@ async function fetchData() {
 	scaledLevels = data.scaledLevels;
 	caps = data.caps;
 	sprites = data.sprites;
+
+	if (typeof renderCurrentSavePokemon === "function") {
+		renderCurrentSavePokemon();
+	}
 	
 	loadingScreen.className = "hide";
 	document.querySelector("main").className = "";

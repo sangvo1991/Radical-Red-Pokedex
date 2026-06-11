@@ -1,0 +1,16 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Created-By: 23.0.2 (Homebrew)
+Tool: Bnd-7.0.0.202310060912
+Bnd-LastModified: 1781121046985
+Import-Package: ghidra.app.cmd.disassemble,ghidra.app.decompiler,ghidra.
+ app.script,ghidra.framework.model,ghidra.program.model.address,ghidra.p
+ rogram.model.lang,ghidra.program.model.listing,ghidra.program.model.sym
+ bol,ghidra.util.task,java.lang,java.lang.invoke,java.math,java.nio.char
+ set,java.nio.file,ghidra.app.plugin.core.osgi
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version>=21))"
+Bundle-SymbolicName: 4ebae52f
+Bundle-Version: 1.0
+Bundle-Name: 4ebae52f
+Bundle-Activator: GeneratedActivator
+

@@ -30,6 +30,9 @@ function getFullLearnset(mon) {
 
 function getSprite(ID) {
   let sprite = sprites[ID];
+  if (sprite === undefined && species?.[ID]) {
+    sprite = `graphics/species/front/${ID}.png`;
+  }
   if (sprite === undefined) sprite = sprites[0];
   return sprite;
 }

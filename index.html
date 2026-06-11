@@ -141,6 +141,16 @@
 						Clear
 					</button>
 				</div>
+				<div id="currentSavePokemon" class="hide">
+					<details id="currentSaveTeamDetails" open>
+						<summary>Team (<span id="currentSaveTeamCount">0</span>)</summary>
+						<div id="currentSaveTeamList" class="savePokemonList"></div>
+					</details>
+					<details id="currentSaveBoxesDetails">
+						<summary>PC Boxes (<span id="currentSaveBoxesCount">0</span>)</summary>
+						<div id="currentSaveBoxesList"></div>
+					</details>
+				</div>
 				<button id="saveFileInputButton" onclick="openSaveFileDialog()">
 					Upload save file (v4.1)
 				</button>
@@ -181,6 +191,7 @@
 	</main>
 	<!-- Optional JavaScript -->
 	<script src="src/globals.js"></script>
+	<script src="src/randomizerMetadata.js"></script>
 	<script src="src/tableMethods.js"></script>
 	<script src="src/sortMethods.js"></script>
 	<script src="src/displayMethods.js"></script>
