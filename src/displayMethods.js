@@ -65,6 +65,7 @@ function displayMovesRow(tracker, move) {
 function displaySpeciesPanel(mon, saveEntry = null) {
 	let infoDisplay = document.getElementById('speciesPanelInfoDisplay');
 	const filterMoveEntries = entries => entries?.filter(entry => entry !== undefined) || [];
+	currentSpeciesPanelState = { mon, saveEntry };
 	let tables = [
 		['speciesLearnsetPrevoExclusiveTable', filterMoveEntries(mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x)))],
 		['speciesLearnsetLevelUpTable', filterMoveEntries(mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1])))],
@@ -121,6 +122,16 @@ function displaySpeciesPanel(mon, saveEntry = null) {
 	}
 
 	$('#speciesModal').modal('show');
+}
+
+// Rebuilds the currently open species modal after appearance settings change.
+function rerenderCurrentSpeciesPanel() {
+	const speciesModal = document.getElementById('speciesModal');
+	if (!speciesModal?.classList.contains('show') || !currentSpeciesPanelState?.mon) {
+		return;
+	}
+
+	displaySpeciesPanel(currentSpeciesPanelState.mon, currentSpeciesPanelState.saveEntry || null);
 }
 
 function buildWrapperCurrentMovesDetail(tag, className, mon, saveEntry = null) {
@@ -758,7 +769,7 @@ function getRandomizedOriginalSpecies(ID) {
 
 function buildWrapperOriginalSpeciesDetail(tag, className, mon) {
 	let wrapper = buildWrapper(tag, className + 'Wrapper');
-	if (!saveData?.random?.normalSpecies) {
+	if (!saveData?.random?.normalSpecies || getAppearanceSetting('hardcoreChangesVisible', true) === false) {
 		return wrapper;
 	}
 
@@ -963,6 +974,10 @@ function buildWrapperHeldItems(tag, className, i) {
 
 function buildWrapperHardcoreSummary(tag, className, mon) {
 	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	if (getAppearanceSetting('hardcoreChangesVisible', true) === false) {
+		return wrapper;
+	}
+
 	let hardcoreAbilities = getSpeciesAbilityPackage(mon, true);
 
 	wrapper.append(buildWrapper('div', 'infoHardcoreLabel', 'Hardcore Mode'));

@@ -21,8 +21,10 @@ function loadAppearanceSettings() {
 	appearanceSettings = {
 		currentTeamVisible: storedSettings.currentTeamVisible !== false,
 		locationBaseOrder: storedSettings.locationBaseOrder === true,
-		allowTextSelection: storedSettings.allowTextSelection === true
+		allowTextSelection: storedSettings.allowTextSelection === true,
+		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false
 	};
+	appearanceSettingsLoaded = true;
 }
 
 // Writes the current appearance settings back to localStorage.
@@ -43,6 +45,11 @@ function isCurrentTeamVisibleEnabled() {
 // Returns whether copy/select protection is disabled for the page.
 function isTextSelectionEnabled() {
 	return appearanceSettings.allowTextSelection === true;
+}
+
+// Returns whether the modal should show Hardcore-specific ability and original-species details.
+function isHardcoreChangesVisibleEnabled() {
+	return appearanceSettings.hardcoreChangesVisible !== false;
 }
 
 // Updates the current team visibility setting and rerenders the save panel if needed.
@@ -77,6 +84,18 @@ function setTextSelectionEnabled(enabled, persist = true) {
 	updateAppearanceSettingsControls();
 }
 
+// Toggles the extra Hardcore/original-species detail blocks in the Pokemon modal.
+function setHardcoreChangesVisible(enabled, persist = true) {
+	appearanceSettings.hardcoreChangesVisible = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	updateAppearanceSettingsControls();
+	if (typeof rerenderCurrentSpeciesPanel === 'function') {
+		rerenderCurrentSpeciesPanel();
+	}
+}
+
 // Applies all persisted appearance settings to the live page state.
 function applyAppearanceSettings() {
 	applyTextSelectionSetting();
@@ -99,6 +118,7 @@ function updateAppearanceSettingsControls() {
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
+	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
 
 	if (defaultRadio) {
 		defaultRadio.checked = currentSearchMode !== 'advanced';
@@ -114,6 +134,9 @@ function updateAppearanceSettingsControls() {
 	}
 	if (allowTextSelectionToggle) {
 		allowTextSelectionToggle.checked = isTextSelectionEnabled();
+	}
+	if (hardcoreChangesToggle) {
+		hardcoreChangesToggle.checked = isHardcoreChangesVisibleEnabled();
 	}
 }
 
@@ -198,6 +221,7 @@ function setupAppearanceSettingsMenu() {
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
+	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
 	if (!wrapper || !button || !menu) {
 		return;
 	}
@@ -314,6 +338,9 @@ function setupAppearanceSettingsMenu() {
 	});
 	allowTextSelectionToggle?.addEventListener('change', function() {
 		setTextSelectionEnabled(allowTextSelectionToggle.checked);
+	});
+	hardcoreChangesToggle?.addEventListener('change', function() {
+		setHardcoreChangesVisible(hardcoreChangesToggle.checked);
 	});
 }
 

@@ -23,7 +23,11 @@ let trackers = {};
 let filters = {};
 let appearanceSettings = {
 	currentTeamVisible: true,
-	locationBaseOrder: false
+	locationBaseOrder: false,
+	hardcoreChangesVisible: true
 };
+let appearanceSettingsLoaded = false;
+
+let currentSpeciesPanelState = null;
 
 let scrollIntoView = true;

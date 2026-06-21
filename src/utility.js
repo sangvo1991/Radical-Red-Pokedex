@@ -17,11 +17,15 @@ function writeAppearanceSettingsToStorage(settings) {
 }
 
 function getAppearanceSetting(key, fallback) {
+  const storedSettings = readAppearanceSettingsFromStorage();
+  if (!appearanceSettingsLoaded && Object.prototype.hasOwnProperty.call(storedSettings, key)) {
+    return storedSettings[key];
+  }
+
   if (appearanceSettings && Object.prototype.hasOwnProperty.call(appearanceSettings, key)) {
     return appearanceSettings[key];
   }
 
-  const storedSettings = readAppearanceSettingsFromStorage();
   if (Object.prototype.hasOwnProperty.call(storedSettings, key)) {
     return storedSettings[key];
   }
