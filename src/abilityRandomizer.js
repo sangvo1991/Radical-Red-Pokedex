@@ -348,8 +348,14 @@ const BOX_CAPACITY = 30;
 const BOX_COUNT = 25;
 const POKEMON_NAME_OFFSET = 0x08;
 const POKEMON_NAME_LENGTH = 10;
+const POKEMON_LANGUAGE_OFFSET = 0x12;
+const POKEMON_FLAGS_OFFSET = 0x13;
+const POKEMON_HAS_SPECIES_MASK = 0x02;
+const POKEMON_LANGUAGE_MIN = 0x01;
+const POKEMON_LANGUAGE_MAX = 0x07;
 const MAX_SPECIES_ID = 1375;
 const DITTO_SPECIES_ID = 132;
+const SAVE_DATA_PARSER_VERSION = 2;
 // RAM 0203B25A 0x10 = Hardmode
 // RAM 0203B25A 0x04 = MGM
 const HARDMODE_BITFLAG = 0xDB2;
@@ -474,27 +480,62 @@ function readEncodedSaveString(file, offset, maxLength) {
     return value;
 }
 
-function readPartyPokemonFromSave(file, slotIndex) {
-    const entryOffset = PARTY_POKEMON_LOGICAL_OFFSET + slotIndex * PARTY_POKEMON_SIZE;
-    const speciesId = file.getUint16(entryOffset + PARTY_POKEMON_SPECIES_OFFSET, true);
-    if (speciesId == 0) {
+// Copies one save entry into a contiguous view and optionally wraps around the logical save buffer.
+function copySaveEntry(file, entryOffset, entrySize, wrap = false) {
+    const sourceBytes = new Uint8Array(file.buffer, file.byteOffset, file.byteLength);
+    const entryBuffer = new ArrayBuffer(entrySize);
+    const entryBytes = new Uint8Array(entryBuffer);
+
+    for (let idx = 0; idx < entrySize; idx++) {
+        const sourceIndex = wrap ? (entryOffset + idx) % file.byteLength : entryOffset + idx;
+        entryBytes[idx] = sourceBytes[sourceIndex];
+    }
+
+    return new DataView(entryBuffer);
+}
+
+// Checks the metadata bytes that Radical Red writes for real stored Pokemon entries.
+function hasValidStoredPokemonMetadata(entryView) {
+    const language = entryView.getUint8(POKEMON_LANGUAGE_OFFSET);
+    const flags = entryView.getUint8(POKEMON_FLAGS_OFFSET);
+
+    return language >= POKEMON_LANGUAGE_MIN
+        && language <= POKEMON_LANGUAGE_MAX
+        && (flags & POKEMON_HAS_SPECIES_MASK) !== 0;
+}
+
+// Reads one stored Pokemon record and rejects garbage records that only look like valid species IDs.
+function readStoredPokemonEntry(entryView, speciesOffset, slot, movesOffset = null) {
+    const speciesId = entryView.getUint16(speciesOffset, true);
+    const nickname = readEncodedSaveString(entryView, POKEMON_NAME_OFFSET, POKEMON_NAME_LENGTH);
+    if (!hasValidStoredPokemonMetadata(entryView) || speciesId <= 0 || speciesId > MAX_SPECIES_ID || nickname.length === 0) {
         return null;
     }
 
-    const moveIds = [];
-    for (let moveIndex = 0; moveIndex < PARTY_POKEMON_MOVE_COUNT; moveIndex++) {
-        const moveId = file.getUint16(entryOffset + PARTY_POKEMON_MOVES_OFFSET + moveIndex * 2, true);
-        if (moveId > 0) {
-            moveIds.push(moveId);
+    const entry = {
+        slot,
+        speciesId,
+        nickname,
+    };
+
+    if (movesOffset !== null) {
+        const moveIds = [];
+        for (let moveIndex = 0; moveIndex < PARTY_POKEMON_MOVE_COUNT; moveIndex++) {
+            const moveId = entryView.getUint16(movesOffset + moveIndex * 2, true);
+            if (moveId > 0) {
+                moveIds.push(moveId);
+            }
         }
+        entry.moveIds = moveIds;
     }
 
-    return {
-        slot: slotIndex + 1,
-        speciesId,
-        nickname: readEncodedSaveString(file, entryOffset + POKEMON_NAME_OFFSET, POKEMON_NAME_LENGTH),
-        moveIds,
-    };
+    return entry;
+}
+
+function readPartyPokemonFromSave(file, slotIndex) {
+    const entryOffset = PARTY_POKEMON_LOGICAL_OFFSET + slotIndex * PARTY_POKEMON_SIZE;
+    const entryView = copySaveEntry(file, entryOffset, PARTY_POKEMON_SIZE);
+    return readStoredPokemonEntry(entryView, PARTY_POKEMON_SPECIES_OFFSET, slotIndex + 1, PARTY_POKEMON_MOVES_OFFSET);
 }
 
 function readBoxPokemonFromSave(file) {
@@ -506,17 +547,12 @@ function readBoxPokemonFromSave(file) {
     for (let slotIndex = 0; slotIndex < BOX_COUNT * BOX_CAPACITY; slotIndex++) {
         // Radical Red stores PC data as a wrapped logical stream, so late boxes
         // continue at the start of the logical save instead of stopping at sector 13.
-        const entryOffset = (BOX_STORAGE_LOGICAL_OFFSET + slotIndex * BOX_POKEMON_SIZE) % file.byteLength;
-        const speciesId = file.getUint16(entryOffset + BOX_POKEMON_SPECIES_OFFSET, true);
-        if (speciesId == 0) {
-            continue;
+        const entryOffset = BOX_STORAGE_LOGICAL_OFFSET + slotIndex * BOX_POKEMON_SIZE;
+        const entryView = copySaveEntry(file, entryOffset, BOX_POKEMON_SIZE, true);
+        const pokemon = readStoredPokemonEntry(entryView, BOX_POKEMON_SPECIES_OFFSET, slotIndex % BOX_CAPACITY + 1);
+        if (pokemon) {
+            boxes[Math.floor(slotIndex / BOX_CAPACITY)].pokemon.push(pokemon);
         }
-
-        boxes[Math.floor(slotIndex / BOX_CAPACITY)].pokemon.push({
-            slot: slotIndex % BOX_CAPACITY + 1,
-            speciesId,
-            nickname: readEncodedSaveString(file, entryOffset + POKEMON_NAME_OFFSET, POKEMON_NAME_LENGTH),
-        });
     }
 
     return boxes;
@@ -654,6 +690,7 @@ function readDataFromSaveFile(file) {
     return {
         valid: true,
         data: {
+            parserVersion: SAVE_DATA_PARSER_VERSION,
             name,
             trainedId,
             restricted,
@@ -685,8 +722,11 @@ function clearCurrentSave() {
 }
 
 function processSaveData(data) {
-    saveData = data;
-    if (data) {
+    saveData = data ? {
+        ...data,
+        parserVersion: SAVE_DATA_PARSER_VERSION,
+    } : data;
+    if (saveData) {
         localStorage.setItem("saveData", JSON.stringify(saveData));
     } else {
         localStorage.removeItem("saveData");
@@ -698,22 +738,22 @@ function processSaveData(data) {
         resetAdvancedFeatureCaches();
     }
 
-    if (data) {
+    if (saveData) {
         const flags = [];
-        if (data.hardmode) {
+        if (saveData.hardmode) {
             flags.push("Hardcore");
-        } else if (data.restricted) {
+        } else if (saveData.restricted) {
             flags.push("Restricted");
         }
     
-        if (data.random.abilities) {
+        if (saveData.random.abilities) {
             flags.push("Random Abilities");
         }
     
-        if (data.random.learnset) {
+        if (saveData.random.learnset) {
             flags.push("Random Learnset");
         }
-        if (data.random.normalSpecies) {
+        if (saveData.random.normalSpecies) {
             flags.push("Random Species");
         }
 
@@ -726,7 +766,7 @@ function processSaveData(data) {
         const currentSaveName = document.getElementById("currentSaveName");
         const currentSaveFlags = document.getElementById("currentSaveFlags");
         if (currentSaveName) {
-            currentSaveName.innerText = data.name;
+            currentSaveName.innerText = saveData.name;
         }
         if (currentSaveFlags) {
             currentSaveFlags.innerText = flags.join(" / ");
@@ -737,7 +777,7 @@ function processSaveData(data) {
     }
     renderCurrentSavePokemon();
     if (typeof onSaveDataProcessed === "function") {
-        onSaveDataProcessed(data);
+        onSaveDataProcessed(saveData);
     }
 
     if (!!species && typeof removeFilters === "function" && document.getElementById("speciesTable")) {
@@ -773,7 +813,12 @@ if (saveFileInputElement) {
 const storedSaveData = localStorage.getItem("saveData");
 if (storedSaveData) {
     try {
-        processSaveData(JSON.parse(storedSaveData));
+        const parsedSaveData = JSON.parse(storedSaveData);
+        if (parsedSaveData?.parserVersion === SAVE_DATA_PARSER_VERSION) {
+            processSaveData(parsedSaveData);
+        } else {
+            localStorage.removeItem("saveData");
+        }
     } catch (error) {
         localStorage.removeItem("saveData");
     }
