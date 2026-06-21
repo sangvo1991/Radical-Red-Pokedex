@@ -126,6 +126,7 @@ function buildAdvancedSearchAutocompleteMetadata() {
 	const eggGroupNames = sortSearchValues(Object.values(eggGroups).filter(Boolean));
 	const locationNames = getAdvancedSearchLocationNames();
 	const locationOriginalNames = getAdvancedSearchOriginalLocationNames();
+	const booleanValues = ['true', 'false'];
 	const hardcoreAbilityNames = sortSearchValues(
 		Object.values(species).flatMap(mon => getSpeciesAbilityPackage(mon, true).map(ability => ability.name))
 	);
@@ -142,6 +143,7 @@ function buildAdvancedSearchAutocompleteMetadata() {
 		hardcoreMoveNames,
 		itemNames,
 		eggGroupNames,
+		booleanValues,
 		locationNames,
 		locationOriginalNames
 	};
@@ -566,6 +568,24 @@ function isAdvancedSearchOperatorToken(token) {
 	);
 }
 
+// Resolves one attribute alias to its normalized advanced-search config entry.
+function getAdvancedSearchAttributeConfig(attributeName) {
+	return ADVANCED_SEARCH_ATTRIBUTE_CONFIG[normalizeSearchKey(attributeName)] || null;
+}
+
+// Returns true when the attribute can stand alone as an implicit `= true` clause.
+function isStandaloneAdvancedSearchAttribute(attributeName) {
+	return getAdvancedSearchAttributeConfig(attributeName)?.kind === 'boolean';
+}
+
+// Detects whether the next token ends a clause instead of starting an explicit value.
+function isAdvancedSearchClauseBoundaryToken(token) {
+	return !token ||
+		(token.type === 'word' && ['and', 'or'].includes(token.value.toLowerCase())) ||
+		token.type === ')' ||
+		token.type === ',';
+}
+
 // Builds the fallback AST used when plain text should search against Pokemon names.
 function buildImplicitNameSearchAst(query) {
 	return {
@@ -640,6 +660,20 @@ function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentA
 			}
 			break;
 		case 'expectOperator':
+			if (
+				attribute?.kind === 'boolean' &&
+				activeToken.type === 'word' &&
+				['and', 'or'].includes(activeToken.value.toLowerCase())
+			) {
+				return { state: 'expectAttribute', currentAttribute: null };
+			}
+			if (
+				attribute?.kind === 'boolean' &&
+				activeToken.type === ')' &&
+				stack[stack.length - 1] === 'expression'
+			) {
+				return { state: 'expectLogicalOrEnd', currentAttribute, stack: stack.slice(0, -1) };
+			}
 			if (
 				(activeToken.type === 'operator' && ['=', '==', '!=', '!~', '>', '>=', '<', '<=', '~'].includes(activeToken.value)) ||
 				(activeToken.type === 'word' && ['has', 'have', 'not'].includes(activeToken.value.toLowerCase()))
@@ -732,6 +766,24 @@ function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 				}
 				return null;
 			case 'expectOperator':
+				if (
+					getAdvancedSearchAttributeConfig(currentAttribute)?.kind === 'boolean' &&
+					token.type === 'word' &&
+					['and', 'or'].includes(token.value.toLowerCase())
+				) {
+					currentAttribute = null;
+					state = 'expectAttribute';
+					break;
+				}
+				if (
+					getAdvancedSearchAttributeConfig(currentAttribute)?.kind === 'boolean' &&
+					token.type === ')' &&
+					stack[stack.length - 1] === 'expression'
+				) {
+					stack.pop();
+					state = 'expectLogicalOrEnd';
+					break;
+				}
 				if (isAdvancedSearchOperatorToken(token)) {
 					state = 'expectValue';
 					break;
@@ -899,6 +951,15 @@ function buildAdvancedSearchValueSuggestions(attribute) {
 		}));
 	}
 
+	if (attribute.kind === 'boolean') {
+		return attribute.values.map(value => ({
+			label: value,
+			insertText: value,
+			meta: attribute.kind,
+			category: 'value'
+		}));
+	}
+
 	return attribute.values.map(value => ({
 		label: value,
 		insertText: quoteAdvancedSearchValue(value),
@@ -971,6 +1032,19 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 		case 'expectOperator':
 			if (!context.attribute) {
 				return [];
+			}
+			if (context.attribute.kind === 'boolean') {
+				const suggestions = [
+					{ label: 'and', insertText: 'and', meta: 'logical', category: 'logical', priority: 0 },
+					{ label: 'or', insertText: 'or', meta: 'logical', category: 'logical', priority: 0 },
+					{ label: '=', insertText: '=', meta: 'operator', category: 'operator', priority: 1 },
+					{ label: '!=', insertText: '!=', meta: 'operator', category: 'operator', priority: 1 },
+					{ label: 'not', insertText: 'not', meta: 'operator', category: 'operator', priority: 1 }
+				];
+				if (context.stack.includes('expression')) {
+					suggestions.push({ label: ')', insertText: ')', meta: 'close group', category: 'delimiter', priority: 0 });
+				}
+				return filterAdvancedSearchSuggestions(suggestions, context.fragment);
 			}
 			return filterAdvancedSearchSuggestions(
 				(context.attribute.kind === 'number'
@@ -1449,6 +1523,16 @@ function getSpeciesFamily(mon) {
 		.sort(cmp(x => x.dexID));
 }
 
+// Returns true when the location list contains a real obtainable source instead of `None`.
+function hasObtainableLocationNames(locationNames) {
+	return locationNames.some(locationName => normalizeSearchText(locationName) !== 'none');
+}
+
+// Checks whether any species in the evolution line is obtainable in the current save context.
+function isSpeciesFamilyAvailable(familyMembers) {
+	return familyMembers.some(relative => hasObtainableLocationNames(getSpeciesLocationNames(relative.ID)));
+}
+
 // Converts a raw evolution tuple into the human-readable evolution description.
 function describeEvolutionMethod(evolution) {
 	const evo = evolution;
@@ -1465,7 +1549,8 @@ function buildSpeciesSearchRecord(mon) {
 	const hardcoreAbilities = getSpeciesAbilityPackage(mon, true);
 	const baseMoves = getSpeciesMovePackage(mon, false);
 	const hardcoreMoves = getSpeciesMovePackage(mon, true);
-	const family = getSpeciesFamily(mon).map(relative => relative.key);
+	const familyMembers = getSpeciesFamily(mon);
+	const family = familyMembers.map(relative => relative.key);
 	const locations = getSpeciesLocationNames(mon.ID);
 	const originalLocations = getSpeciesOriginalLocationNames(mon.ID);
 	const record = {
@@ -1483,6 +1568,9 @@ function buildSpeciesSearchRecord(mon) {
 			bst: mon.stats.reduce((total, stat) => total + stat, 0),
 			dex: mon.dexID,
 			dexid: mon.dexID
+		},
+		booleans: {
+			available: isSpeciesFamilyAvailable(familyMembers)
 		},
 		lists: {
 			type: mon.type.map(typeId => types[typeId].name),
@@ -1648,6 +1736,18 @@ function parseAdvancedSearch(input) {
 
 		if (matchWord('not')) {
 			consume();
+			if (
+				peek()?.type === 'word' &&
+				isStandaloneAdvancedSearchAttribute(peek().value) &&
+				isAdvancedSearchClauseBoundaryToken(tokens[index + 1])
+			) {
+				return {
+					type: 'comparison',
+					attribute: consume().value,
+					operator: '=',
+					value: false
+				};
+			}
 			return {
 				type: 'comparison',
 				attribute: 'name',
@@ -1663,6 +1763,18 @@ function parseAdvancedSearch(input) {
 		const attributeToken = consume();
 		if (!attributeToken || attributeToken.type !== 'word') {
 			throw new Error('Expected an attribute name in advanced search.');
+		}
+
+		if (
+			isStandaloneAdvancedSearchAttribute(attributeToken.value) &&
+			isAdvancedSearchClauseBoundaryToken(peek())
+		) {
+			return {
+				type: 'comparison',
+				attribute: attributeToken.value,
+				operator: '=',
+				value: true
+			};
 		}
 
 		const operatorToken = consume();
@@ -1769,6 +1881,11 @@ function evaluateAdvancedSearch(ast, mon) {
 		return evaluateNumberComparison(numberValue, ast.operator, ast.value, ast.attribute);
 	}
 
+	const booleanValue = record.booleans?.[attribute];
+	if (booleanValue !== undefined) {
+		return evaluateBooleanComparison(booleanValue, ast.operator, ast.value, ast.attribute);
+	}
+
 	if (attribute === 'name' || attribute === 'pokemon' || attribute === 'species') {
 		return evaluateStringComparison(record.name, ast.operator, ast.value, ast.attribute);
 	}
@@ -1804,6 +1921,43 @@ function evaluateNumberComparison(actual, operator, expected, attribute) {
 			return actual <= expected;
 		default:
 			throw new Error(`Operator "${operator}" is not valid for numbers.`);
+	}
+}
+
+// Parses boolean query values from either quoted or unquoted `true` / `false` literals.
+function parseBooleanSearchValue(expected, attribute) {
+	if (typeof expected === 'boolean') {
+		return expected;
+	}
+
+	if (Array.isArray(expected) || typeof expected === 'number') {
+		throw new Error(`Attribute "${attribute}" only supports true/false values.`);
+	}
+
+	const normalizedValue = normalizeSearchText(expected);
+	if (normalizedValue === 'true') {
+		return true;
+	}
+	if (normalizedValue === 'false') {
+		return false;
+	}
+
+	throw new Error(`Attribute "${attribute}" only supports true or false.`);
+}
+
+// Evaluates boolean comparisons such as availability checks.
+function evaluateBooleanComparison(actual, operator, expected, attribute) {
+	const expectedValue = parseBooleanSearchValue(expected, attribute);
+
+	switch (operator) {
+		case '=':
+		case '==':
+			return actual === expectedValue;
+		case '!=':
+		case 'not':
+			return actual !== expectedValue;
+		default:
+			throw new Error(`Operator "${operator}" is not valid for booleans.`);
 	}
 }
 

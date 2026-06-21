@@ -34,6 +34,7 @@ const ADVANCED_SEARCH_ATTRIBUTE_CONFIG = {
 	locations: { kind: 'list', valuesKey: 'locationNames' },
 	locationoriginal: { kind: 'list', valuesKey: 'locationOriginalNames' },
 	locationsoriginal: { kind: 'list', valuesKey: 'locationOriginalNames' },
+	available: { kind: 'boolean', valuesKey: 'booleanValues' },
 	egggroup: { kind: 'list', valuesKey: 'eggGroupNames' },
 	egggroups: { kind: 'list', valuesKey: 'eggGroupNames' }
 };

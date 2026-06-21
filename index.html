@@ -145,6 +145,7 @@
 							<p><code>(moveset has ('counter', 'mirror coat'))</code></p>
 							<p><b>Number attributes</b>: <code>hp</code>, <code>atk</code>, <code>def</code>, <code>spa</code>, <code>spatk</code>, <code>spd</code>, <code>spdef</code>, <code>spe</code>, <code>speed</code>, <code>bst</code>, <code>dex</code>, <code>dexid</code>.</p>
 							<p><b>String attributes</b>: <code>name</code>. Use <code>=</code> for exact match and <code>has</code>/<code>have</code> for substring match.</p>
+							<p><b>Boolean attributes</b>: <code>available</code>. A bare <code>available</code> means <code>available = true</code>.</p>
 							<p><b>List attributes</b>: <code>type</code>, <code>types</code>, <code>ability</code>, <code>abilities</code>, <code>moveset</code>, <code>moves</code>, <code>move</code>, <code>evolution</code>, <code>evolutions</code>, <code>item</code>, <code>items</code>, <code>egggroup</code>, <code>egggroups</code>.</p>
 							<p><b>Hardcore-aware list attributes</b>: <code>hardcoreability</code>, <code>hardcoreabilities</code>, <code>hardcoremove</code>, <code>hardcoremoves</code>, <code>hardcoremoveset</code>.</p>
 							<p>Attribute names are case-insensitive, so <code>BST</code>, <code>bst</code>, <code>ATK</code>, and <code>atk</code> all work.</p>
@@ -156,6 +157,7 @@
 							<p><code>moveset has ('stealth rock', 'spikes')</code></p>
 							<p><code>location has 'route 3'</code></p>
 							<p><code>locationoriginal has 'route 3'</code></p>
+							<p><code>bst &gt; 500 and ability = 'huge power' and available</code></p>
 							<p><code>ability ~ ('huge power', 'feline prowess')</code></p>
 							<p><code>name !~ 'arceus'</code></p>
 							<p><code>bst > 500 and not 'arceus'</code></p>
