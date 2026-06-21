@@ -126,6 +126,7 @@ function buildAdvancedSearchAutocompleteMetadata() {
 	const eggGroupNames = sortSearchValues(Object.values(eggGroups).filter(Boolean));
 	const locationNames = getAdvancedSearchLocationNames();
 	const locationOriginalNames = getAdvancedSearchOriginalLocationNames();
+	const originalSpeciesNames = getAdvancedSearchOriginalSpeciesNames();
 	const booleanValues = ['true', 'false'];
 	const hardcoreAbilityNames = sortSearchValues(
 		Object.values(species).flatMap(mon => getSpeciesAbilityPackage(mon, true).map(ability => ability.name))
@@ -145,7 +146,8 @@ function buildAdvancedSearchAutocompleteMetadata() {
 		eggGroupNames,
 		booleanValues,
 		locationNames,
-		locationOriginalNames
+		locationOriginalNames,
+		originalSpeciesNames
 	};
 
 	advancedSearchAutocompleteMetadata = createAdvancedSearchAutocompleteMetadata(valuesByKey);
@@ -1074,7 +1076,7 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 					? ['=', '!=', 'not', '>', '>=', '<', '<=']
 					: (context.attribute.kind === 'list'
 						? ['=', '!=', '!~', 'not', 'has', '~']
-						: ['=', '!=', '!~', 'not', 'has'])
+						: ['=', '!=', '!~', 'not', 'has', '~'])
 				).map(operator => ({
 					label: operator,
 					insertText: operator,
@@ -1583,6 +1585,7 @@ function buildSpeciesSearchRecord(mon) {
 	const family = familyMembers.map(relative => relative.key);
 	const locations = getSpeciesLocationNames(mon.ID);
 	const originalLocations = getSpeciesOriginalLocationNames(mon.ID);
+	const originalSpecies = getSpeciesOriginalSearchNames(mon);
 	const record = {
 		name: mon.key,
 		numbers: {
@@ -1623,6 +1626,8 @@ function buildSpeciesSearchRecord(mon) {
 			locations,
 			locationoriginal: originalLocations,
 			locationsoriginal: originalLocations,
+			originalpokemon: originalSpecies,
+			originalspecies: originalSpecies,
 			egggroup: (mon.eggGroup || []).filter(Boolean).map(groupId => eggGroups[groupId]),
 			egggroups: (mon.eggGroup || []).filter(Boolean).map(groupId => eggGroups[groupId])
 		}
@@ -1993,24 +1998,33 @@ function evaluateBooleanComparison(actual, operator, expected, attribute) {
 
 // Evaluates string comparisons such as implicit or explicit name matching.
 function evaluateStringComparison(actual, operator, expected, attribute) {
-	if (Array.isArray(expected) || typeof expected === 'number') {
+	if (typeof expected === 'number') {
 		throw new Error(`Attribute "${attribute}" only supports string comparisons.`);
 	}
 
 	const actualValue = normalizeSearchText(actual);
-	const expectedValue = normalizeSearchText(expected);
+	const expectedValues = Array.isArray(expected) ? expected : [expected];
+	const normalizedExpected = expectedValues.map(value => normalizeSearchText(value));
 
 	switch (operator) {
 		case '=':
 		case '==':
-			return actualValue === expectedValue;
+			if (normalizedExpected.length !== 1) {
+				throw new Error(`Operator "${operator}" only supports one string value for "${attribute}".`);
+			}
+			return actualValue === normalizedExpected[0];
 		case '!=':
 		case 'not':
-			return actualValue !== expectedValue;
+			if (normalizedExpected.length !== 1) {
+				throw new Error(`Operator "${operator}" only supports one string value for "${attribute}".`);
+			}
+			return actualValue !== normalizedExpected[0];
 		case 'has':
-			return actualValue.includes(expectedValue);
+			return normalizedExpected.every(expectedValue => actualValue.includes(expectedValue));
+		case '~':
+			return normalizedExpected.some(expectedValue => actualValue.includes(expectedValue));
 		case '!~':
-			return !actualValue.includes(expectedValue);
+			return normalizedExpected.every(expectedValue => !actualValue.includes(expectedValue));
 		default:
 			throw new Error(`Operator "${operator}" is not valid for strings.`);
 	}
@@ -2214,4 +2228,25 @@ function getSpeciesLocationNames(speciesId) {
 function getSpeciesOriginalLocationNames(speciesId) {
 	const entries = buildAdvancedSearchLocationIndex(false).get(speciesId) || [];
 	return entries.length ? uniqStrings(entries.map(entry => entry.name)) : ['None'];
+}
+
+// Returns searchable original-species names for the active save context.
+function getAdvancedSearchOriginalSpeciesNames() {
+	const names = new Set(Object.values(species || {}).map(mon => mon.key));
+	if (saveData?.random?.normalSpecies) {
+		names.add('None');
+	}
+	return sortSearchValues(Array.from(names));
+}
+
+// Returns the original species that map to one displayed species in the current save.
+function getSpeciesOriginalSearchNames(mon) {
+	if (saveData?.random?.normalSpecies && typeof getRandomizedOriginalSpecies === 'function') {
+		const originalSpecies = getRandomizedOriginalSpecies(mon.ID)
+			.map(originalMon => originalMon?.key)
+			.filter(Boolean);
+		return originalSpecies.length ? uniqStrings(originalSpecies) : ['None'];
+	}
+
+	return [mon.key];
 }

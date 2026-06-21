@@ -520,17 +520,27 @@ li:hover {
 	gap: 15px;
 }
 
-#appearanceSettingsWrapper {
+#topRightMenuRow {
 	position: fixed;
 	top: 24px;
 	right: 24px;
 	z-index: 10;
 	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: flex-start;
+}
+
+#appearanceSettingsWrapper,
+#advancedSearchShortcutsWrapper {
+	position: relative;
+	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
 }
 
-#appearanceSettingsButton {
+#appearanceSettingsButton,
+#advancedSearchShortcutsButton {
 	display: block;
 	padding: 0.25rem 0.65rem;
 	border-radius: 4px;
@@ -541,7 +551,8 @@ li:hover {
 	appearance: none;
 }
 
-#appearanceSettingsMenu {
+#appearanceSettingsMenu,
+#advancedSearchShortcutsMenu {
 	position: absolute;
 	top: calc(100% + 8px);
 	right: 0;
@@ -558,7 +569,12 @@ li:hover {
 	transform-origin: top right;
 }
 
-#appearanceSettingsMenu.visible {
+#advancedSearchShortcutsMenu {
+	min-width: min(360px, calc(100vw - 48px));
+}
+
+#appearanceSettingsMenu.visible,
+#advancedSearchShortcutsMenu.visible {
 	opacity: 1;
 	transform: translateY(0);
 }
@@ -585,6 +601,28 @@ li:hover {
 .appearanceSettingsSubOption {
 	margin-left: 1.45rem;
 	font-size: 0.95rem;
+}
+
+.advancedSearchShortcutButton {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: 100%;
+	padding: 0.45rem 0.55rem;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(255, 255, 255, 0.03);
+	color: white;
+	text-align: left;
+	appearance: none;
+}
+
+.advancedSearchShortcutButton + .advancedSearchShortcutButton {
+	margin-top: 0.5rem;
+}
+
+.advancedSearchShortcutTitle {
+	font-weight: 700;
 }
 
 #settingsExportJsonButton {
@@ -813,7 +851,7 @@ tbody {
 	cursor: auto;
 }
 
-.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover {
+.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchShortcutButton:hover {
 	background: rgba(255, 255, 255, 0.075);
 }
 

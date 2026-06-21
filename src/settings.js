@@ -1,8 +1,24 @@
 let currentSearchMode = 'default';
 let appearanceSettingsHideTimer = null;
 let appearanceSettingsVisibilityTimer = null;
+let advancedSearchShortcutsHideTimer = null;
+let advancedSearchShortcutsVisibilityTimer = null;
 
 const ADVANCED_SEARCH_MODE_STORAGE_KEY = 'advancedSearchMode';
+const ADVANCED_SEARCH_SHORTCUTS = [
+	{
+		title: 'Sweeper',
+		query: "((ability ~ ('huge','intrepid') and atk >= 95 and spe >= 90) or (ability = 'feline prowess' and spa >= 95 and spe >= 90)) and bst >= 520"
+	},
+	{
+		title: 'Trade Pokemon',
+		query: "name ~ ('snom','carbink','Pikipek','Florges','Furret','Murkrow','Dedenne','Aegislash','Ursaluna')"
+	},
+	{
+		title: 'Traded Pokemon',
+		query: "originalpokemon ~ ('Carnivine','Eiscue','Farfetch','Chatot','Morpeko','Mimikyu','Chillet','Aegislash','Ursaluna')"
+	}
+];
 
 // Bootstraps the split feature set and reapplies persisted UI/search state.
 function setupAdvancedFeatures() {
@@ -10,6 +26,7 @@ function setupAdvancedFeatures() {
 	loadAppearanceSettings();
 	loadAdvancedSearchHistory();
 	setupAdvancedSearch();
+	setupAdvancedSearchShortcutsMenu();
 	setupAppearanceSettingsMenu();
 	applyAppearanceSettings();
 	setSearchMode(getStoredSearchMode(), false);
@@ -402,4 +419,149 @@ function setupAppearanceSettingsMenu() {
 // Flips the search mode using the current in-memory selection.
 function toggleSearchMode() {
 	setSearchMode(currentSearchMode === 'advanced' ? 'default' : 'advanced');
+}
+
+// Fills the advanced-search box from a preset shortcut, then runs the query immediately.
+function applyAdvancedSearchShortcut(query) {
+	const input = document.getElementById('advancedSearchInput');
+	if (!input || typeof runAdvancedSearch !== 'function') {
+		return;
+	}
+
+	setSearchMode('advanced', false);
+	input.value = query;
+	input.focus();
+	input.setSelectionRange(input.value.length, input.value.length);
+	advancedSearchLastInputValue = input.value;
+	runAdvancedSearch();
+}
+
+// Rebuilds the shortcut menu buttons from the predefined advanced-search presets.
+function renderAdvancedSearchShortcutsMenu(menu, hideMenu) {
+	if (!menu) {
+		return;
+	}
+
+	const shortcutButtons = ADVANCED_SEARCH_SHORTCUTS.map(shortcut => {
+		const button = document.createElement('button');
+		button.type = 'button';
+		button.className = 'advancedSearchShortcutButton';
+
+		const title = document.createElement('span');
+		title.className = 'advancedSearchShortcutTitle';
+		title.textContent = shortcut.title;
+
+		button.append(title);
+		button.addEventListener('click', function() {
+			applyAdvancedSearchShortcut(shortcut.query);
+			hideMenu();
+		});
+		return button;
+	});
+
+	menu.replaceChildren(...shortcutButtons);
+}
+
+// Wires the shortcut popup so it mirrors the same click/fade interaction used by settings.
+function setupAdvancedSearchShortcutsMenu() {
+	const wrapper = document.getElementById('advancedSearchShortcutsWrapper');
+	const button = document.getElementById('advancedSearchShortcutsButton');
+	const menu = document.getElementById('advancedSearchShortcutsMenu');
+	if (!wrapper || !button || !menu) {
+		return;
+	}
+
+	const showMenu = function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+			advancedSearchShortcutsHideTimer = null;
+		}
+		if (advancedSearchShortcutsVisibilityTimer) {
+			clearTimeout(advancedSearchShortcutsVisibilityTimer);
+			advancedSearchShortcutsVisibilityTimer = null;
+		}
+
+		renderAdvancedSearchShortcutsMenu(menu, hideMenu);
+		if (menu.classList.contains('hide')) {
+			menu.classList.remove('hide');
+			menu.classList.remove('visible');
+			requestAnimationFrame(function() {
+				menu.classList.add('visible');
+			});
+		} else {
+			menu.classList.add('visible');
+		}
+		button.setAttribute('aria-expanded', 'true');
+	};
+
+	const hideMenu = function() {
+		menu.classList.remove('visible');
+		button.setAttribute('aria-expanded', 'false');
+		if (advancedSearchShortcutsVisibilityTimer) {
+			clearTimeout(advancedSearchShortcutsVisibilityTimer);
+		}
+		advancedSearchShortcutsVisibilityTimer = setTimeout(function() {
+			advancedSearchShortcutsVisibilityTimer = null;
+			if (!menu.classList.contains('visible')) {
+				menu.classList.add('hide');
+			}
+		}, 120);
+	};
+
+	const scheduleHideMenu = function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+		}
+		advancedSearchShortcutsHideTimer = setTimeout(function() {
+			advancedSearchShortcutsHideTimer = null;
+			if (wrapper.contains(document.activeElement)) {
+				return;
+			}
+			hideMenu();
+		}, 1000);
+	};
+
+	const scheduleHideMenuFromMouseLeave = function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+		}
+		advancedSearchShortcutsHideTimer = setTimeout(function() {
+			advancedSearchShortcutsHideTimer = null;
+			hideMenu();
+		}, 1000);
+	};
+
+	button.addEventListener('click', function(event) {
+		event.preventDefault();
+		if (menu.classList.contains('hide')) {
+			showMenu();
+			return;
+		}
+		hideMenu();
+	});
+	menu.addEventListener('focusin', function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+			advancedSearchShortcutsHideTimer = null;
+		}
+	});
+	menu.addEventListener('mouseenter', function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+			advancedSearchShortcutsHideTimer = null;
+		}
+	});
+	wrapper.addEventListener('mouseenter', function() {
+		if (advancedSearchShortcutsHideTimer) {
+			clearTimeout(advancedSearchShortcutsHideTimer);
+			advancedSearchShortcutsHideTimer = null;
+		}
+	});
+	wrapper.addEventListener('mouseleave', scheduleHideMenuFromMouseLeave);
+	menu.addEventListener('focusout', scheduleHideMenu);
+	document.addEventListener('mousedown', function(event) {
+		if (!wrapper.contains(event.target)) {
+			scheduleHideMenu();
+		}
+	});
 }

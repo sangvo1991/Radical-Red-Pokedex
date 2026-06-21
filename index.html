@@ -15,45 +15,51 @@
 		<p>Loading Radical Red Pokedex...</p>
 	</div>
 	<main class="hide">
-		<div id="appearanceSettingsWrapper">
-			<button id="appearanceSettingsButton" type="button" aria-expanded="false">Settings</button>
-			<div id="appearanceSettingsMenu" class="hide" tabindex="-1">
-				<div class="appearanceSettingsGroup">
-					<div class="appearanceSettingsGroupLabel">Default Search</div>
+		<div id="topRightMenuRow">
+			<div id="advancedSearchShortcutsWrapper">
+				<button id="advancedSearchShortcutsButton" type="button" aria-expanded="false">Quick Search</button>
+				<div id="advancedSearchShortcutsMenu" class="hide" tabindex="-1"></div>
+			</div>
+			<div id="appearanceSettingsWrapper">
+				<button id="appearanceSettingsButton" type="button" aria-expanded="false">Settings</button>
+				<div id="appearanceSettingsMenu" class="hide" tabindex="-1">
+					<div class="appearanceSettingsGroup">
+						<div class="appearanceSettingsGroupLabel">Default Search</div>
+						<label class="appearanceSettingsOption">
+							<input type="radio" name="defaultSearchMode" id="appearanceSearchModeDefault" value="default">
+							<span>Normal Search</span>
+						</label>
+						<label class="appearanceSettingsOption">
+							<input type="radio" name="defaultSearchMode" id="appearanceSearchModeAdvanced" value="advanced">
+							<span>Advanced Search</span>
+						</label>
+						<label id="appearanceDisableValueSuggestionsOption" class="appearanceSettingsOption appearanceSettingsSubOption hide">
+							<input type="checkbox" id="appearanceDisableValueSuggestionsToggle">
+							<span>Disable Value(PKM) suggestion</span>
+						</label>
+					</div>
 					<label class="appearanceSettingsOption">
-						<input type="radio" name="defaultSearchMode" id="appearanceSearchModeDefault" value="default">
-						<span>Normal Search</span>
+						<input type="checkbox" id="appearanceAvailableOnlyToggle">
+						<span>Available Pokemons Only</span>
 					</label>
 					<label class="appearanceSettingsOption">
-						<input type="radio" name="defaultSearchMode" id="appearanceSearchModeAdvanced" value="advanced">
-						<span>Advanced Search</span>
+						<input type="checkbox" id="appearanceCurrentTeamToggle">
+						<span>Current Team</span>
 					</label>
-					<label id="appearanceDisableValueSuggestionsOption" class="appearanceSettingsOption appearanceSettingsSubOption hide">
-						<input type="checkbox" id="appearanceDisableValueSuggestionsToggle">
-						<span>Disable Value(PKM) suggestion</span>
+					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceLocationBaseOrderToggle">
+						<span>Location Base Order</span>
 					</label>
+					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceAllowTextSelectionToggle">
+						<span>Allow Text Selection</span>
+					</label>
+					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceHardcoreChangesToggle">
+						<span>Randomized Changes</span>
+					</label>
+					<button id="settingsExportJsonButton" class="customTooltipButton" data-tooltip="For any randomizer run analyzing" type="button" onclick="exportPokemonData()">Export JSON</button>
 				</div>
-				<label class="appearanceSettingsOption">
-					<input type="checkbox" id="appearanceAvailableOnlyToggle">
-					<span>Available Pokemons Only</span>
-				</label>
-				<label class="appearanceSettingsOption">
-					<input type="checkbox" id="appearanceCurrentTeamToggle">
-					<span>Current Team</span>
-				</label>
-				<label class="appearanceSettingsOption">
-					<input type="checkbox" id="appearanceLocationBaseOrderToggle">
-					<span>Location Base Order</span>
-				</label>
-				<label class="appearanceSettingsOption">
-					<input type="checkbox" id="appearanceAllowTextSelectionToggle">
-					<span>Allow Text Selection</span>
-				</label>
-				<label class="appearanceSettingsOption">
-					<input type="checkbox" id="appearanceHardcoreChangesToggle">
-					<span>Randomized Changes</span>
-				</label>
-				<button id="settingsExportJsonButton" class="customTooltipButton" data-tooltip="For any randomizer run analyzing" type="button" onclick="exportPokemonData()">Export JSON</button>
 			</div>
 		</div>
 		<div class="modal fade" id="speciesModal" tabindex="-1" role="dialog" aria-labelledby="Full Pokemon Info" aria-hidden="true">
@@ -152,9 +158,9 @@
 							<p><code>(atk &lt; 100 and type = fairy)</code></p>
 							<p><code>(moveset has ('counter', 'mirror coat'))</code></p>
 							<p><b>Number attributes</b>: <code>hp</code>, <code>atk</code>, <code>def</code>, <code>spa</code>, <code>spatk</code>, <code>spd</code>, <code>spdef</code>, <code>spe</code>, <code>speed</code>, <code>bst</code>, <code>dex</code>, <code>dexid</code>.</p>
-							<p><b>String attributes</b>: <code>name</code>. Use <code>=</code> for exact match and <code>has</code>/<code>have</code> for substring match.</p>
+							<p><b>String attributes</b>: <code>name</code>. Use <code>=</code> for exact match, <code>has</code>/<code>have</code> for substring match, and <code>~</code> for include-any matching.</p>
 							<p><b>Boolean attributes</b>: <code>available</code>. A bare <code>available</code> means <code>available = true</code>.</p>
-							<p><b>List attributes</b>: <code>type</code>, <code>types</code>, <code>ability</code>, <code>abilities</code>, <code>moveset</code>, <code>moves</code>, <code>move</code>, <code>evolution</code>, <code>evolutions</code>, <code>item</code>, <code>items</code>, <code>egggroup</code>, <code>egggroups</code>.</p>
+							<p><b>List attributes</b>: <code>type</code>, <code>types</code>, <code>ability</code>, <code>abilities</code>, <code>moveset</code>, <code>moves</code>, <code>move</code>, <code>evolution</code>, <code>evolutions</code>, <code>item</code>, <code>items</code>, <code>egggroup</code>, <code>egggroups</code>, <code>originalpokemon</code>, <code>originalspecies</code>.</p>
 							<p><b>Hardcore-aware list attributes</b>: <code>hardcoreability</code>, <code>hardcoreabilities</code>, <code>hardcoremove</code>, <code>hardcoremoves</code>, <code>hardcoremoveset</code>.</p>
 							<p>Attribute names are case-insensitive, so <code>BST</code>, <code>bst</code>, <code>ATK</code>, and <code>atk</code> all work.</p>
 							<p>For list attributes, <code>=</code> and <code>has</code>/<code>have</code> both mean the Pokemon must contain the requested entry. Comparing against a tuple means it must contain every listed value.</p>
@@ -165,8 +171,10 @@
 							<p><code>moveset has ('stealth rock', 'spikes')</code></p>
 							<p><code>location has 'route 3'</code></p>
 							<p><code>locationoriginal has 'route 3'</code></p>
+							<p><code>originalpokemon = 'pikachu'</code></p>
 							<p><code>bst &gt; 500 and ability = 'huge power' and available</code></p>
 							<p><code>ability ~ ('huge power', 'feline prowess')</code></p>
+							<p><code>name ~ ('snom', 'carbink', 'pikipek')</code></p>
 							<p><code>name !~ 'arceus'</code></p>
 							<p><code>bst > 500 and not 'arceus'</code></p>
 						</div>
