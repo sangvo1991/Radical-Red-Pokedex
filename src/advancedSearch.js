@@ -475,7 +475,7 @@ function tokenizeAdvancedSearchPartial(input) {
 		}
 
 		const twoChar = input.slice(index, index + 2);
-		if (['>=', '<=', '!=', '=='].includes(twoChar)) {
+		if (['>=', '<=', '!=', '==', '!~'].includes(twoChar)) {
 			tokens.push({ type: 'operator', value: twoChar, start, end: index + 2, partial: false });
 			index += 2;
 			continue;
@@ -641,7 +641,7 @@ function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentA
 			break;
 		case 'expectOperator':
 			if (
-				(activeToken.type === 'operator' && ['=', '==', '!=', '>', '>=', '<', '<=', '~'].includes(activeToken.value)) ||
+				(activeToken.type === 'operator' && ['=', '==', '!=', '!~', '>', '>=', '<', '<=', '~'].includes(activeToken.value)) ||
 				(activeToken.type === 'word' && ['has', 'have', 'not'].includes(activeToken.value.toLowerCase()))
 			) {
 				return { state: 'expectValue', currentAttribute };
@@ -976,8 +976,8 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 				(context.attribute.kind === 'number'
 					? ['=', '!=', 'not', '>', '>=', '<', '<=']
 					: (context.attribute.kind === 'list'
-						? ['=', '!=', 'not', 'has', '~']
-						: ['=', '!=', 'not', 'has'])
+						? ['=', '!=', '!~', 'not', 'has', '~']
+						: ['=', '!=', '!~', 'not', 'has'])
 				).map(operator => ({
 					label: operator,
 					insertText: operator,
@@ -1528,7 +1528,7 @@ function tokenizeAdvancedSearch(input) {
 		}
 
 		const twoChar = input.slice(index, index + 2);
-		if (['>=', '<=', '!=', '=='].includes(twoChar)) {
+		if (['>=', '<=', '!=', '==', '!~'].includes(twoChar)) {
 			tokens.push({ type: 'operator', value: twoChar });
 			index += 2;
 			continue;
@@ -1825,6 +1825,8 @@ function evaluateStringComparison(actual, operator, expected, attribute) {
 			return actualValue !== expectedValue;
 		case 'has':
 			return actualValue.includes(expectedValue);
+		case '!~':
+			return !actualValue.includes(expectedValue);
 		default:
 			throw new Error(`Operator "${operator}" is not valid for strings.`);
 	}
@@ -1849,6 +1851,8 @@ function evaluateListComparison(actualList, operator, expected) {
 		case '!=':
 		case 'not':
 			return normalizedExpected.every(expectedValue => !normalizedActual.includes(expectedValue));
+		case '!~':
+			return !anyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
 		default:
 			throw new Error(`Operator "${operator}" is not valid for list comparisons.`);
 	}

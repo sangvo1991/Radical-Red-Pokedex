@@ -1114,12 +1114,24 @@ td.moveDescriptionWrapper {
 	#speciesTable tbody {
 		scroll-margin-top: 67px;
 	}
+
+	.locationSpeciesTableWrapper tbody {
+		scroll-margin-top: 67px;
+	}
 	
 	#speciesTable .sortLocked {
 		display: none;
 	}
+
+	.locationSpeciesTableWrapper .sortLocked {
+		display: none;
+	}
 	
 	#speciesTable .table td {
+		border: none;
+	}
+
+	.locationSpeciesTableWrapper .table td {
 		border: none;
 	}
 	
@@ -1130,6 +1142,10 @@ td.moveDescriptionWrapper {
 		display: -webkit-flex;     /* NEW - Chrome */
 		display: flex;             /* NEW, Spec - Opera 12.1, Firefox 20+ */
 		flex-wrap: wrap;
+	}
+
+	.locationSpeciesTableWrapper .sortControls {
+		display: none;
 	}
 
 	#speciesTable .sortOption {
@@ -1162,6 +1178,10 @@ td.moveDescriptionWrapper {
 	}
 	
 	.speciesSpriteWrapper, .speciesNameWrapper, #speciesTable .speciesTypesWrapper {
+		width: 33%;
+	}
+
+	.locationSpeciesTableWrapper .speciesTypesWrapper {
 		width: 33%;
 	}
 	
@@ -1297,6 +1317,18 @@ td.moveDescriptionWrapper {
 }
 
 @media (max-width: 768px) {
+	#speciesLocationGroups {
+		padding: 0 14px;
+	}
+
+	.locationSpeciesGroupTitle {
+		font-size: 1.15rem;
+	}
+
+	.locationSpeciesTableWrapper .table {
+		max-width: 100%;
+	}
+
 	#teamPageContent {
 		padding: 0 14px;
 	}
