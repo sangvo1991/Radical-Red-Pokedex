@@ -346,6 +346,11 @@ const BOX_POKEMON_SIZE = 58;
 const BOX_POKEMON_SPECIES_OFFSET = 0x1C;
 const BOX_CAPACITY = 30;
 const BOX_COUNT = 25;
+const PRIMARY_BOX_COUNT = 23;
+const EXTRA_BOX_REGIONS = [
+    { box: 24, logicalOffset: 13776 },
+    { box: 25, logicalOffset: 176 },
+];
 const POKEMON_NAME_OFFSET = 0x08;
 const POKEMON_NAME_LENGTH = 10;
 const POKEMON_LANGUAGE_OFFSET = 0x12;
@@ -355,7 +360,7 @@ const POKEMON_LANGUAGE_MIN = 0x01;
 const POKEMON_LANGUAGE_MAX = 0x07;
 const MAX_SPECIES_ID = 1375;
 const DITTO_SPECIES_ID = 132;
-const SAVE_DATA_PARSER_VERSION = 2;
+const SAVE_DATA_PARSER_VERSION = 3;
 // RAM 0203B25A 0x10 = Hardmode
 // RAM 0203B25A 0x04 = MGM
 const HARDMODE_BITFLAG = 0xDB2;
@@ -538,21 +543,41 @@ function readPartyPokemonFromSave(file, slotIndex) {
     return readStoredPokemonEntry(entryView, PARTY_POKEMON_SPECIES_OFFSET, slotIndex + 1, PARTY_POKEMON_MOVES_OFFSET);
 }
 
+// Reads one fixed 30-slot PC region that Radical Red uses for late extra boxes.
+function readFixedBoxPokemonRegion(file, logicalOffset) {
+    const pokemon = [];
+
+    for (let slotIndex = 0; slotIndex < BOX_CAPACITY; slotIndex++) {
+        const entryOffset = logicalOffset + slotIndex * BOX_POKEMON_SIZE;
+        const entryView = copySaveEntry(file, entryOffset, BOX_POKEMON_SIZE, false);
+        const entry = readStoredPokemonEntry(entryView, BOX_POKEMON_SPECIES_OFFSET, slotIndex + 1);
+        if (entry) {
+            pokemon.push(entry);
+        }
+    }
+
+    return pokemon;
+}
+
 function readBoxPokemonFromSave(file) {
     const boxes = Array.from({length: BOX_COUNT}, (_, idx) => ({
         box: idx + 1,
         pokemon: [],
     }));
 
-    for (let slotIndex = 0; slotIndex < BOX_COUNT * BOX_CAPACITY; slotIndex++) {
-        // Radical Red stores PC data as a wrapped logical stream, so late boxes
-        // continue at the start of the logical save instead of stopping at sector 13.
+    // Reads the primary wrapped PC stream that holds the first 23 boxes.
+    for (let slotIndex = 0; slotIndex < PRIMARY_BOX_COUNT * BOX_CAPACITY; slotIndex++) {
         const entryOffset = BOX_STORAGE_LOGICAL_OFFSET + slotIndex * BOX_POKEMON_SIZE;
         const entryView = copySaveEntry(file, entryOffset, BOX_POKEMON_SIZE, true);
         const pokemon = readStoredPokemonEntry(entryView, BOX_POKEMON_SPECIES_OFFSET, slotIndex % BOX_CAPACITY + 1);
         if (pokemon) {
             boxes[Math.floor(slotIndex / BOX_CAPACITY)].pokemon.push(pokemon);
         }
+    }
+
+    // Reads the two recurring side regions that Radical Red uses for the late boxes.
+    for (const region of EXTRA_BOX_REGIONS) {
+        boxes[region.box - 1].pokemon = readFixedBoxPokemonRegion(file, region.logicalOffset);
     }
 
     return boxes;
