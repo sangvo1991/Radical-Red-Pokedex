@@ -12,6 +12,14 @@ function cmpAll(cmps) {
 	}
 }
 
+function getLevelUpMoveRowMove(row) {
+	return row?.move ?? row?.[0] ?? {name: '', type: 0, split: 0, power: 0, accuracy: 0};
+}
+
+function getLevelUpMoveRowLevel(row) {
+	return row?.level ?? row?.[1] ?? 0;
+}
+
 function setupTables() {
 	for (const name of [
 		//'speciesLearnsetPrevoExclusiveTable',
@@ -19,15 +27,15 @@ function setupTables() {
 	]) {
 		setupTable(name, displayLevelUpMovesRow, Object.keys(moves).length,
 			{
-				'Lvl': cmp(x => x[1]),
-				'Name': cmp(x => x[0].name),
-				'Type': cmp(x => types[x[0].type].name),
-				'Category': cmp(x => x[0].split),
-				'Power': cmp(x => x[0].power, -1),
-				'Acc': cmp(x => x[0].accuracy, -1),
+				'Lvl': cmp(x => getLevelUpMoveRowLevel(x)),
+				'Name': cmp(x => getLevelUpMoveRowMove(x).name),
+				'Type': cmp(x => types[getLevelUpMoveRowMove(x).type].name),
+				'Category': cmp(x => getLevelUpMoveRowMove(x).split),
+				'Power': cmp(x => getLevelUpMoveRowMove(x).power, -1),
+				'Acc': cmp(x => getLevelUpMoveRowMove(x).accuracy, -1),
 				'Description': null
 			},
-			[cmp(x => x[1]), cmp(x => x[0].name)]
+			[cmp(x => getLevelUpMoveRowLevel(x)), cmp(x => getLevelUpMoveRowMove(x).name)]
 		);
 	}
 	
@@ -68,7 +76,7 @@ function setupTables() {
 		[cmp(x => x.dexID), cmp(x => x.order)]
 	);
 	
-	populateTable('speciesTable', Object.values(species));
+	renderSpeciesResults(Object.values(species));
 	
 	window.onscroll = function(ev) {
 		if ((window.innerHeight + window.pageYOffset) >= document.body.offsetHeight) {
@@ -129,6 +137,23 @@ function populateTable(name, data) {
 	scrollIntoView = false;
 	tracker.sortControls[0].click();
 	scrollIntoView = true;
+}
+
+function renderSpeciesResults(data) {
+	const groupedWrapper = document.getElementById('speciesLocationGroups');
+	const tableWrapper = document.getElementById('speciesTable');
+	const useLocationBaseOrder = typeof isLocationBaseOrderEnabled === 'function' && isLocationBaseOrderEnabled();
+
+	if (useLocationBaseOrder && typeof renderSpeciesLocationGroups === 'function') {
+		tableWrapper?.classList.add('hide');
+		groupedWrapper?.classList.remove('hide');
+		renderSpeciesLocationGroups(data);
+		return;
+	}
+
+	groupedWrapper?.classList.add('hide');
+	tableWrapper?.classList.remove('hide');
+	populateTable('speciesTable', data);
 }
 
 function sortTracker(selectedOption, tracker, compare) {

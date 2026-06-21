@@ -29,8 +29,8 @@ function displaySpeciesRow(tracker, mon) {
 }
 
 function displayLevelUpMovesRow(tracker, movePair) {
-	let move = movePair.move ?? movePair[0];
-	let level = movePair.level ?? movePair[1];
+	let move = movePair?.move ?? movePair?.[0] ?? movePair;
+	let level = movePair?.level ?? movePair?.[1];
 	let currentRow = document.createElement('tr');
 	currentRow.className = 'movesRow';
 	tracker.body.appendChild(currentRow);
@@ -62,15 +62,16 @@ function displayMovesRow(tracker, move) {
 	);
 }
 
-function displaySpeciesPanel(mon) {
+function displaySpeciesPanel(mon, saveEntry = null) {
 	let infoDisplay = document.getElementById('speciesPanelInfoDisplay');
+	const filterMoveEntries = entries => entries?.filter(entry => entry !== undefined) || [];
 	let tables = [
-		['speciesLearnsetPrevoExclusiveTable', mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x))],
-		['speciesLearnsetLevelUpTable', mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1]))],
-		['speciesLearnsetTMHMTable', mon.tmMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tmMoves[x], null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetTutorTable', mon.tutorMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tutorMoves[x], null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetEggMovesTable', mon.eggMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
-		['speciesLearnsetEventTable', mon.eventMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)).filter(x => x !== undefined)],
+		['speciesLearnsetPrevoExclusiveTable', filterMoveEntries(mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x)))],
+		['speciesLearnsetLevelUpTable', filterMoveEntries(mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1])))],
+		['speciesLearnsetTMHMTable', filterMoveEntries(mon.tmMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tmMoves[x], null, true)))],
+		['speciesLearnsetTutorTable', filterMoveEntries(mon.tutorMoves?.map(x => buildSpeciesPanelMoveEntry(mon, tutorMoves[x], null, true)))],
+		['speciesLearnsetEggMovesTable', filterMoveEntries(mon.eggMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)))],
+		['speciesLearnsetEventTable', filterMoveEntries(mon.eventMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x, null, true)))],
 	]
 	
 	infoDisplay.innerText = '';
@@ -96,25 +97,56 @@ function displaySpeciesPanel(mon) {
 	
 	infoDisplay.append(
 		statWrapper,
+		buildWrapperCap('div', 'infoCap', mon.ID),
+		buildWrapperCurrentMovesDetail('div', 'infoCurrentMoves', mon, saveEntry),
 		buildWrapperChangelog('div', 'infoChangelog', mon),
 		buildWrapperFamilyTree('div', 'infoFamilyTree', mon),
 		buildWrapperCoverageDefensive('div', 'infoCoverage', mon.type[0], mon.type[1]),
 		buildWrapperHardcoreSummary('div', 'infoHardcore', mon),
-		//buildWrapperCap('div', 'infoCap', mon.ID),
 		buildWrapperHeldItems('div', 'infoItems', mon.items),
+		buildWrapperOriginalSpeciesDetail('div', 'infoOriginalSpecies', mon),
 		//buildWrapperEggGroups('div', 'infoEggGroups', mon.eggGroup),
 	);
 
 	for (const [ID, data] of tables) {
 		let table = document.getElementById(ID);
 		table.className = 'tableWrapper';
-		if (data && data.length > 0)
+		if (data.length > 0) {
+			table.classList.remove('hide');
 			populateTable(ID, data);
-		else
-			table.classList.toggle('hide');
+		}
+		else {
+			table.classList.add('hide');
+		}
 	}
 
 	$('#speciesModal').modal('show');
+}
+
+function buildWrapperCurrentMovesDetail(tag, className, mon, saveEntry = null) {
+	let moveIds = saveEntry?.moveIds || [];
+	if (!moveIds.length) {
+		return buildWrapper(tag, className + 'Wrapper');
+	}
+
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	wrapper.append(buildWrapper('div', 'infoCurrentMovesLabel', 'Current Moves'));
+
+	let moveList = buildWrapper('div', 'infoCurrentMovesList');
+	for (const moveId of moveIds) {
+		const move = moves?.[moveId];
+		if (!move) {
+			continue;
+		}
+		moveList.append(buildWrapperMoveName('div', 'infoCurrentMove', move));
+	}
+
+	if (!moveList.childElementCount) {
+		return buildWrapper(tag, className + 'Wrapper');
+	}
+
+	wrapper.append(moveList);
+	return wrapper;
 }
 
 function buildWrapper(tag, className, text=null) {
@@ -425,44 +457,500 @@ function buildWrapperTypeMatchup(type, matchup) {
 	return wrapper;
 }
 
+let speciesLocationIndexCache = null;
+let randomizedSpeciesLocationCache = new Map();
+let randomizedSpeciesOriginalCache = new Map();
+const RANDOMIZER_LOCATION_FALLBACK_SPECIES_ID = 132;
+
+function collectSpeciesIdsFromEncounterValue(value, speciesIds) {
+	if (Array.isArray(value)) {
+		const looksLikeEncounterTuple =
+			value.length > 0 &&
+			value.length <= 3 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= 1375 &&
+			value.slice(1).every(level => typeof level === 'number' && level >= 0 && level <= 100);
+		const looksLikeRaidTuple =
+			value.length === 2 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= 1375 &&
+			Array.isArray(value[1]);
+		if (looksLikeEncounterTuple || looksLikeRaidTuple) {
+			speciesIds.add(value[0]);
+			return;
+		}
+
+		if (value.length > 0 && value.every(entry => typeof entry === 'number')) {
+			for (const entry of value) {
+				if (entry > 0 && entry <= 1375) {
+					speciesIds.add(entry);
+				}
+			}
+			return;
+		}
+
+		for (const entry of value) {
+			collectSpeciesIdsFromEncounterValue(entry, speciesIds);
+		}
+		return;
+	}
+
+	if (value && typeof value === 'object') {
+		for (const entry of Object.values(value)) {
+			collectSpeciesIdsFromEncounterValue(entry, speciesIds);
+		}
+	}
+}
+
+function isIndexedLocationBucket(bucket) {
+	return bucket !== 'name' &&
+		(bucket.includes('wild') || bucket.includes('fixed') || bucket.startsWith('raid'));
+}
+
+function formatSpeciesLocationName(areaName, bucket) {
+	if (!bucket.startsWith('raid')) {
+		return areaName;
+	}
+
+	const starMatch = bucket.match(/^raid(\d+)$/);
+	if (!starMatch) {
+		return `${areaName} Raid Dens`;
+	}
+
+	return `${areaName} Raid Dens (${Number(starMatch[1])}-star)`;
+}
+
+function buildSpeciesLocationEntry(areaId, areaName, bucket, customName = null) {
+	const normalizedAreaId = Number.isFinite(Number(areaId)) ? Number(areaId) : -1;
+	const name = customName || formatSpeciesLocationName(areaName, bucket);
+	return {
+		key: `${normalizedAreaId}:${name}`,
+		areaId: normalizedAreaId,
+		areaName,
+		name,
+	};
+}
+
+function addLocationEntry(locationIndex, speciesId, locationEntry) {
+	if (!locationIndex.has(speciesId)) {
+		locationIndex.set(speciesId, new Map());
+	}
+	locationIndex.get(speciesId).set(locationEntry.key, locationEntry);
+}
+
+function getLocationMetadataGroup(groupName) {
+	if (typeof LOCATION_METADATA !== 'object' || !LOCATION_METADATA) {
+		return [];
+	}
+
+	const group = LOCATION_METADATA[groupName];
+	return Array.isArray(group) ? group : [];
+}
+
+function applyGiftLocationMetadata(locationIndex) {
+	for (const giftEntry of getLocationMetadataGroup('gifts')) {
+		if (!giftEntry || typeof giftEntry.speciesId !== 'number') {
+			continue;
+		}
+
+		const matchAreaNames = Array.isArray(giftEntry.matchAreaNames)
+			? giftEntry.matchAreaNames
+			: [];
+		let matchedExistingLocation = false;
+		const speciesLocations = locationIndex.get(giftEntry.speciesId);
+		if (speciesLocations) {
+			for (const [key, location] of Array.from(speciesLocations.entries())) {
+				if (!matchAreaNames.includes(location.areaName)) {
+					continue;
+				}
+
+				const updatedLocation = buildSpeciesLocationEntry(
+					location.areaId,
+					location.areaName,
+					giftEntry.bucket || 'fixed-gift',
+					giftEntry.displayName
+				);
+				speciesLocations.delete(key);
+				speciesLocations.set(updatedLocation.key, updatedLocation);
+				matchedExistingLocation = true;
+			}
+		}
+
+		if (!matchedExistingLocation && giftEntry.areaName) {
+			addLocationEntry(
+				locationIndex,
+				giftEntry.speciesId,
+				buildSpeciesLocationEntry(
+					giftEntry.areaId,
+					giftEntry.areaName,
+					giftEntry.bucket || 'fixed-gift',
+					giftEntry.displayName
+				)
+			);
+		}
+	}
+}
+
+function getSpeciesLocationIndex() {
+	if (speciesLocationIndexCache) {
+		return speciesLocationIndexCache;
+	}
+
+	const locationIndex = new Map();
+	if (!areas) {
+		speciesLocationIndexCache = locationIndex;
+		return speciesLocationIndexCache;
+	}
+
+	for (const [areaId, area] of Object.entries(areas)) {
+		const areaName = area.name || `Area ${areaId}`;
+		for (const [bucket, value] of Object.entries(area)) {
+			if (!isIndexedLocationBucket(bucket)) {
+				continue;
+			}
+
+			const encounteredSpeciesIds = new Set();
+			collectSpeciesIdsFromEncounterValue(value, encounteredSpeciesIds);
+			const locationEntry = buildSpeciesLocationEntry(areaId, areaName, bucket);
+			for (const speciesId of encounteredSpeciesIds) {
+				addLocationEntry(locationIndex, speciesId, locationEntry);
+			}
+		}
+	}
+
+	applyGiftLocationMetadata(locationIndex);
+
+	speciesLocationIndexCache = new Map();
+	for (const [speciesId, locationMap] of locationIndex.entries()) {
+		const locationList = Array.from(locationMap.values())
+			.sort((a, b) =>
+				a.areaName.localeCompare(b.areaName) ||
+				a.areaId - b.areaId ||
+				a.name.localeCompare(b.name)
+			);
+		speciesLocationIndexCache.set(speciesId, locationList);
+	}
+
+	return speciesLocationIndexCache;
+}
+
+function getDirectSpeciesAreas(ID) {
+	return getSpeciesLocationIndex().get(ID) || [];
+}
+
+function resetDisplayLocationCaches() {
+	randomizedSpeciesLocationCache.clear();
+	randomizedSpeciesOriginalCache.clear();
+}
+
+function getRandomizerSpeciesPoolKey() {
+	if (typeof RANDOMIZER_SPECIES_POOLS !== 'object' || !RANDOMIZER_SPECIES_POOLS) {
+		return null;
+	}
+
+	const branchKey = saveData?.random?.speciesBranchKey;
+	if (typeof branchKey === 'string' && typeof RANDOMIZER_SPECIES_BRANCHES === 'object' && RANDOMIZER_SPECIES_BRANCHES) {
+		const branch = RANDOMIZER_SPECIES_BRANCHES[branchKey];
+		if (!branch || !branch.deterministic || typeof branch.poolKey !== 'string') {
+			return null;
+		}
+		return RANDOMIZER_SPECIES_POOLS[branch.poolKey] ? branch.poolKey : null;
+	}
+
+	if (typeof DEFAULT_RANDOMIZER_SPECIES_POOL === 'string') {
+		return DEFAULT_RANDOMIZER_SPECIES_POOL;
+	}
+
+	return Object.keys(RANDOMIZER_SPECIES_POOLS)[0] || null;
+}
+
+function getRandomizerSpeciesPool() {
+	const poolKey = getRandomizerSpeciesPoolKey();
+	return poolKey ? RANDOMIZER_SPECIES_POOLS[poolKey] || null : null;
+}
+
+function mapSpeciesFromRandomizerPool(speciesId, trainedId, pool) {
+	if (!pool || !Array.isArray(pool.speciesIds) || !pool.count) {
+		return speciesId;
+	}
+
+	if (speciesId <= 0 || speciesId > 1375) {
+		return speciesId;
+	}
+
+	const slot = (Math.imul(speciesId, trainedId >>> 0) >>> 0) % pool.count;
+	const mappedSpeciesId = pool.speciesIds[slot] || RANDOMIZER_LOCATION_FALLBACK_SPECIES_ID;
+	if (mappedSpeciesId <= 0 || mappedSpeciesId > 1375) {
+		return RANDOMIZER_LOCATION_FALLBACK_SPECIES_ID;
+	}
+	return mappedSpeciesId;
+}
+
+function getRandomizedSpeciesAreas(ID) {
+	const trainedId = saveData?.trainedId;
+	const pool = getRandomizerSpeciesPool();
+	const poolKey = getRandomizerSpeciesPoolKey();
+	if (typeof trainedId !== 'number' || !Number.isFinite(trainedId) || !pool || !poolKey) {
+		return [];
+	}
+
+	const cacheKey = `${trainedId}:${poolKey}:${ID}`;
+	if (randomizedSpeciesLocationCache.has(cacheKey)) {
+		return randomizedSpeciesLocationCache.get(cacheKey);
+	}
+
+	const mergedAreas = new Map();
+	for (const [originalSpeciesId, locations] of getSpeciesLocationIndex().entries()) {
+		if (mapSpeciesFromRandomizerPool(originalSpeciesId, trainedId, pool) !== ID) {
+			continue;
+		}
+
+		for (const location of locations) {
+			mergedAreas.set(location.key || `${location.areaId}:${location.name}`, location);
+		}
+	}
+
+	const mappedAreas = Array.from(mergedAreas.values())
+		.sort((a, b) =>
+			(a.areaName || a.name).localeCompare(b.areaName || b.name) ||
+			a.areaId - b.areaId ||
+			a.name.localeCompare(b.name)
+		);
+	randomizedSpeciesLocationCache.set(cacheKey, mappedAreas);
+	return mappedAreas;
+}
+
+function getRandomizedOriginalSpecies(ID) {
+	const trainedId = saveData?.trainedId;
+	const pool = getRandomizerSpeciesPool();
+	const poolKey = getRandomizerSpeciesPoolKey();
+	if (typeof trainedId !== 'number' || !Number.isFinite(trainedId) || !pool || !poolKey || !species) {
+		return [];
+	}
+
+	const cacheKey = `${trainedId}:${poolKey}:${ID}`;
+	if (randomizedSpeciesOriginalCache.has(cacheKey)) {
+		return randomizedSpeciesOriginalCache.get(cacheKey);
+	}
+
+	const originalSpecies = [];
+	for (const mon of Object.values(species)) {
+		if (!mon || typeof mon.ID !== 'number') {
+			continue;
+		}
+
+		if (mapSpeciesFromRandomizerPool(mon.ID, trainedId, pool) !== ID) {
+			continue;
+		}
+
+		originalSpecies.push(mon);
+	}
+
+	originalSpecies.sort((a, b) =>
+		(a.dexID || 0) - (b.dexID || 0) ||
+		a.key.localeCompare(b.key)
+	);
+	randomizedSpeciesOriginalCache.set(cacheKey, originalSpecies);
+	return originalSpecies;
+}
+
+function buildWrapperOriginalSpeciesDetail(tag, className, mon) {
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	if (!saveData?.random?.normalSpecies) {
+		return wrapper;
+	}
+
+	const originalSpecies = getRandomizedOriginalSpecies(mon.ID);
+	if (!originalSpecies.length) {
+		return wrapper;
+	}
+
+	const originalSpeciesText = originalSpecies
+		.map(originalMon => `${originalMon.key} (#${originalMon.dexID})`)
+		.join(', ');
+	wrapper.append(buildWrapper('div', className, `Original Pkm: ${originalSpeciesText}`));
+	return wrapper;
+}
+
 function buildWrapperCap(tag, className, ID) {
 	let wrapper = buildWrapper(tag, className + 'Wrapper');
-	
-	let myAreas = Object.values(areas).reduce((listx, x) => listx.concat(x.areas), []).filter(x => Object.values(x).reduce((listy, y) => list.concat(Object.entries(y).filter(z => z[0].includes('wild') || z[0].includes('fixed')).map(z => z[1]).reduce((listz, z) => listz.concat(Object.values(z)), [])), []));
-	
-	wrapper.append(buildWrapper('div', 'infoCapLabel', 'Availability'));
+	let myAreas = saveData?.random?.normalSpecies
+		? getRandomizedSpeciesAreas(ID)
+		: getDirectSpeciesAreas(ID);
+
+	wrapper.append(buildWrapper('div', 'infoCapLabel', 'Location'));
 	if (myAreas.length > 0) {
 		for (const area of myAreas) {
 			wrapper.append(buildWrapper('div', className, area.name));
 		}
 	}
 	else {
-		wrapper.append(buildWrapper('div', className, 'Unobtainable in the wild.'));
+		wrapper.append(buildWrapper('div', className, 'None'));
 	}
-	
-	//wrapper.append(buildWrapper('div', 'infoCapLabel', 'Level Cap'));
-	
-	//if ('normal' in cap) {
-	//	wrapper.append(buildWrapper('div', className, 'Available on Normal ' + caps[cap.normal].name + '.'));
-	//}
-	//else {
-	//	wrapper.append(buildWrapper('div', className, 'Unobtainable on Normal Difficulty.'));
-	//}
-	//
-	//if ('hardcore' in cap) {
-	//	wrapper.append(buildWrapper('div', className, 'Available on Hardcore ' + caps[cap.hardcore].name + '.'));
-	//}
-	//else {
-	//	wrapper.append(buildWrapper('div', className, 'Unobtainable on Hardcore Difficulty.'));
-	//}
-	
+
 	return wrapper;
+}
+
+function collectOrderedSpeciesIdsFromEncounterValue(value, orderedSpeciesIds, seenSpeciesIds) {
+	if (typeof value === 'number') {
+		if (species?.[value] && !seenSpeciesIds.has(value)) {
+			seenSpeciesIds.add(value);
+			orderedSpeciesIds.push(value);
+		}
+		return;
+	}
+
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			collectOrderedSpeciesIdsFromEncounterValue(entry, orderedSpeciesIds, seenSpeciesIds);
+		}
+		return;
+	}
+
+	if (value && typeof value === 'object') {
+		for (const entry of Object.values(value)) {
+			collectOrderedSpeciesIdsFromEncounterValue(entry, orderedSpeciesIds, seenSpeciesIds);
+		}
+	}
+}
+
+function buildSpeciesLocationGroups(results) {
+	const speciesById = new Map(results.map(mon => [mon.ID, mon]));
+	const groupedLocations = new Map();
+	const unmappedSpeciesIds = new Set(speciesById.keys());
+	const useRandomizedLocations = saveData?.random?.normalSpecies === true;
+	const trainedId = saveData?.trainedId;
+	const pool = useRandomizedLocations ? getRandomizerSpeciesPool() : null;
+	const canMapRandomizedSpecies = useRandomizedLocations && typeof trainedId === 'number' && Number.isFinite(trainedId) && !!pool;
+
+	const appendSpeciesToLocation = function(locationEntry, speciesId) {
+		const mon = speciesById.get(speciesId);
+		if (!mon) {
+			return;
+		}
+
+		const key = locationEntry?.key || `${locationEntry?.areaId ?? -1}:${locationEntry?.name || 'None'}`;
+		if (!groupedLocations.has(key)) {
+			groupedLocations.set(key, {
+				key,
+				areaId: Number.isFinite(Number(locationEntry?.areaId)) ? Number(locationEntry.areaId) : Number.MAX_SAFE_INTEGER,
+				title: locationEntry?.name || 'None',
+				seenSpecies: new Set(),
+				species: []
+			});
+		}
+
+		const group = groupedLocations.get(key);
+		if (group.seenSpecies.has(mon.ID)) {
+			return;
+		}
+
+		group.seenSpecies.add(mon.ID);
+		group.species.push(mon);
+		unmappedSpeciesIds.delete(mon.ID);
+	};
+
+	for (const [areaId, area] of Object.entries(areas || {})) {
+		const areaName = area.name || `Area ${areaId}`;
+		for (const [bucket, value] of Object.entries(area)) {
+			if (!isIndexedLocationBucket(bucket)) {
+				continue;
+			}
+
+			const orderedSpeciesIds = [];
+			collectOrderedSpeciesIdsFromEncounterValue(value, orderedSpeciesIds, new Set());
+			const locationEntry = buildSpeciesLocationEntry(areaId, areaName, bucket);
+			for (const originalSpeciesId of orderedSpeciesIds) {
+				const speciesId = canMapRandomizedSpecies
+					? mapSpeciesFromRandomizerPool(originalSpeciesId, trainedId, pool)
+					: originalSpeciesId;
+				appendSpeciesToLocation(locationEntry, speciesId);
+			}
+		}
+	}
+
+	for (const mon of speciesById.values()) {
+		const resolvedLocations = saveData?.random?.normalSpecies
+			? getRandomizedSpeciesAreas(mon.ID)
+			: getDirectSpeciesAreas(mon.ID);
+		if (!resolvedLocations.length) {
+			continue;
+		}
+
+		for (const locationEntry of resolvedLocations) {
+			appendSpeciesToLocation(locationEntry, mon.ID);
+		}
+	}
+
+	if (unmappedSpeciesIds.size) {
+		const noneEntry = { key: 'none:none', areaId: Number.MAX_SAFE_INTEGER, name: 'None' };
+		for (const speciesId of unmappedSpeciesIds) {
+			appendSpeciesToLocation(noneEntry, speciesId);
+		}
+	}
+
+	return Array.from(groupedLocations.values())
+		.filter(group => group.species.length > 0)
+		.sort((left, right) =>
+			left.areaId - right.areaId ||
+			left.title.localeCompare(right.title)
+		);
+}
+
+function renderSpeciesLocationGroups(results) {
+	const wrapper = document.getElementById('speciesLocationGroups');
+	if (!wrapper) {
+		return;
+	}
+
+	if (!results.length) {
+		wrapper.replaceChildren(buildWrapper('div', 'locationSpeciesEmpty', 'No Pokemon match the current filters.'));
+		return;
+	}
+
+	const groups = buildSpeciesLocationGroups(results);
+	if (!groups.length) {
+		wrapper.replaceChildren(buildWrapper('div', 'locationSpeciesEmpty', 'None'));
+		return;
+	}
+
+	const sections = groups.map(group => {
+		const section = buildWrapper('section', 'locationSpeciesGroup');
+		const title = buildWrapper('h2', 'locationSpeciesGroupTitle', group.title);
+		const tableWrapper = buildWrapper('div', 'tableWrapper locationSpeciesTableWrapper');
+		const table = document.createElement('table');
+		table.className = 'align-middle table table-striped table-dark table-hover';
+
+		const thead = document.createElement('thead');
+		const headerRow = document.createElement('tr');
+		headerRow.className = 'sortControls';
+		for (const label of ['#', 'Sprite', 'Name', 'Type', 'Abilities', 'HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe', 'BST']) {
+			headerRow.append(buildWrapper('th', 'sortLocked', label));
+		}
+		thead.append(headerRow);
+
+		const tbody = document.createElement('tbody');
+		const tracker = { body: tbody };
+		for (const mon of group.species) {
+			displaySpeciesRow(tracker, mon);
+		}
+
+		table.append(thead, tbody);
+		tableWrapper.append(table);
+
+		section.append(title, tableWrapper);
+		return section;
+	});
+
+	wrapper.replaceChildren(...sections);
 }
 
 function buildWrapperHeldItems(tag, className, i) {
 	let wrapper = buildWrapper(tag, className + 'Wrapper');
 	
-	if (i.equals([0, 0])) //why must it be this way?
+	if (!Array.isArray(i) || (i[0] === 0 && i[1] === 0))
 		return wrapper;
 	wrapper.append(buildWrapper('div', 'infoItemsLabel', 'Held Items'));
 	if (i[0])
@@ -501,7 +989,7 @@ function buildWrapperHardcoreSummary(tag, className, mon) {
 function buildWrapperEggGroups(tag, className, e) {
 	let wrapper = buildWrapper(tag, className + 'Wrapper');
 	
-	if (e.equals([0, 0]))
+	if (!Array.isArray(e) || (e[0] === 0 && e[1] === 0))
 		return wrapper;
 	
 	wrapper.append(buildWrapper('div', 'infoEggGroupsLabel', 'Egg Groups'));

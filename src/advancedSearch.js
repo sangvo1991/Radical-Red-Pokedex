@@ -77,7 +77,17 @@ let advancedSearchAutocompleteSuggestions = [];
 let advancedSearchAutocompleteIndex = -1;
 let advancedSearchActionsHideTimer = null;
 let advancedSearchActionsVisibilityTimer = null;
+let advancedSearchHistory = [];
+let advancedSearchLastInputValue = '';
+let advancedSearchResolvedLocationIndex = null;
+let advancedSearchResolvedLocationNames = null;
+let advancedSearchOriginalLocationIndex = null;
+let advancedSearchOriginalLocationNames = null;
+const ADVANCED_SEARCH_HISTORY_STORAGE_KEY = 'advancedSearchHistory';
+const ADVANCED_SEARCH_HISTORY_LIMIT = 3;
+const ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID = 1375;
 
+// Clears derived caches so search metadata can be rebuilt from current data/save state.
 function resetAdvancedFeatureCaches() {
 	speciesSearchCache = new Map();
 	movePackageCache = {
@@ -91,17 +101,18 @@ function resetAdvancedFeatureCaches() {
 	advancedSearchAutocompleteMetadata = null;
 	advancedSearchAutocompleteSuggestions = [];
 	advancedSearchAutocompleteIndex = -1;
+	advancedSearchResolvedLocationIndex = null;
+	advancedSearchResolvedLocationNames = null;
+	advancedSearchOriginalLocationIndex = null;
+	advancedSearchOriginalLocationNames = null;
 }
 
-function setupAdvancedFeatures() {
-	buildHardcoreState();
-	setupAdvancedSearch();
-}
-
+// Deduplicates and alphabetizes display values used by autocomplete metadata.
 function sortSearchValues(values) {
 	return uniqStrings(values).sort((left, right) => left.localeCompare(right));
 }
 
+// Builds the autocomplete dictionary for attributes and allowed value suggestions.
 function buildAdvancedSearchAutocompleteMetadata() {
 	if (advancedSearchAutocompleteMetadata) {
 		return advancedSearchAutocompleteMetadata;
@@ -113,6 +124,8 @@ function buildAdvancedSearchAutocompleteMetadata() {
 	const moveNames = sortSearchValues(Object.values(moves).map(move => move.name));
 	const itemNames = sortSearchValues(Object.values(items).map(item => item?.name));
 	const eggGroupNames = sortSearchValues(Object.values(eggGroups).filter(Boolean));
+	const locationNames = getAdvancedSearchLocationNames();
+	const locationOriginalNames = getAdvancedSearchOriginalLocationNames();
 	const hardcoreAbilityNames = sortSearchValues(
 		Object.values(species).flatMap(mon => getSpeciesAbilityPackage(mon, true).map(ability => ability.name))
 	);
@@ -128,13 +141,16 @@ function buildAdvancedSearchAutocompleteMetadata() {
 		moveNames,
 		hardcoreMoveNames,
 		itemNames,
-		eggGroupNames
+		eggGroupNames,
+		locationNames,
+		locationOriginalNames
 	};
 
 	advancedSearchAutocompleteMetadata = createAdvancedSearchAutocompleteMetadata(valuesByKey);
 	return advancedSearchAutocompleteMetadata;
 }
 
+// Resolves Hardcore-specific move bans and ability replacement tables once per session.
 function buildHardcoreState() {
 	if (hardcoreState) {
 		return hardcoreState;
@@ -190,6 +206,46 @@ function buildHardcoreState() {
 	return hardcoreState;
 }
 
+// Loads the recent advanced-search query history from localStorage.
+function loadAdvancedSearchHistory() {
+	try {
+		const raw = localStorage.getItem(ADVANCED_SEARCH_HISTORY_STORAGE_KEY);
+		const parsed = raw ? JSON.parse(raw) : [];
+		advancedSearchHistory = Array.isArray(parsed)
+			? parsed.filter(query => typeof query === 'string' && query.trim()).slice(0, ADVANCED_SEARCH_HISTORY_LIMIT)
+			: [];
+	}
+	catch {
+		advancedSearchHistory = [];
+	}
+}
+
+// Persists the trimmed advanced-search history list to localStorage.
+function saveAdvancedSearchHistory() {
+	try {
+		localStorage.setItem(
+			ADVANCED_SEARCH_HISTORY_STORAGE_KEY,
+			JSON.stringify(advancedSearchHistory.slice(0, ADVANCED_SEARCH_HISTORY_LIMIT))
+		);
+	}
+	catch {}
+}
+
+// Stores a successful query at the top of the in-memory history list.
+function rememberAdvancedSearchQuery(query) {
+	const normalizedQuery = String(query || '').trim();
+	if (!normalizedQuery) {
+		return;
+	}
+
+	advancedSearchHistory = [
+		normalizedQuery,
+		...advancedSearchHistory.filter(previousQuery => previousQuery !== normalizedQuery)
+	].slice(0, ADVANCED_SEARCH_HISTORY_LIMIT);
+	saveAdvancedSearchHistory();
+}
+
+// Wires the advanced search input, autocomplete popup, and action button visibility.
 function setupAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
 	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
@@ -274,8 +330,15 @@ function setupAdvancedSearch() {
 		}
 	});
 
-	input.addEventListener('input', function() {
+	input.addEventListener('input', function(event) {
 		showAdvancedSearchActions();
+		const nextValue = input.value;
+		const didDelete = (event.inputType && event.inputType.startsWith('delete')) || nextValue.length < advancedSearchLastInputValue.length;
+		if (didDelete) {
+			clearAdvancedSearchPredicateState();
+			refreshSpeciesResults();
+		}
+		advancedSearchLastInputValue = nextValue;
 		refreshAdvancedSearchAutocomplete();
 	});
 	input.addEventListener('click', function() {
@@ -298,6 +361,7 @@ function setupAdvancedSearch() {
 	});
 }
 
+// Clears the autocomplete popup and resets its selection state.
 function hideAdvancedSearchAutocomplete() {
 	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
 	if (!dropdown) {
@@ -310,6 +374,7 @@ function hideAdvancedSearchAutocomplete() {
 	dropdown.className = 'hide';
 }
 
+// Moves the highlighted autocomplete row up or down with wrapping behavior.
 function moveAdvancedSearchAutocompleteSelection(direction) {
 	if (!advancedSearchAutocompleteSuggestions.length) {
 		return;
@@ -326,6 +391,7 @@ function moveAdvancedSearchAutocompleteSelection(direction) {
 	renderAdvancedSearchAutocomplete();
 }
 
+// Recomputes autocomplete suggestions from the current input and cursor position.
 function refreshAdvancedSearchAutocomplete() {
 	const input = document.getElementById('advancedSearchInput');
 	if (!input) {
@@ -338,6 +404,7 @@ function refreshAdvancedSearchAutocomplete() {
 	renderAdvancedSearchAutocomplete();
 }
 
+// Renders the autocomplete list and keeps the active suggestion in view.
 function renderAdvancedSearchAutocomplete() {
 	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
 	if (!dropdown) {
@@ -358,15 +425,22 @@ function renderAdvancedSearchAutocomplete() {
 		label.className = 'advancedSearchAutocompleteLabel';
 		label.textContent = suggestion.label;
 
-		const meta = document.createElement('span');
-		meta.className = 'advancedSearchAutocompleteMeta';
-		meta.textContent = suggestion.meta;
+			const meta = document.createElement('span');
+			meta.className = 'advancedSearchAutocompleteMeta';
+			meta.textContent = suggestion.meta;
 
-		item.append(label, meta);
-		item.addEventListener('mousedown', function(event) {
-			event.preventDefault();
-			applyAdvancedSearchAutocompleteSuggestion(suggestion);
-		});
+			item.append(label, meta);
+			item.addEventListener('mouseenter', function() {
+				if (advancedSearchAutocompleteIndex === index) {
+					return;
+				}
+				advancedSearchAutocompleteIndex = index;
+				renderAdvancedSearchAutocomplete();
+			});
+			item.addEventListener('mousedown', function(event) {
+				event.preventDefault();
+				applyAdvancedSearchAutocompleteSuggestion(suggestion);
+			});
 		dropdown.append(item);
 	});
 
@@ -378,12 +452,14 @@ function renderAdvancedSearchAutocomplete() {
 	}
 }
 
+// Normalizes smart quotes from mobile keyboards into parser-friendly ASCII quotes.
 function normalizeAdvancedSearchInput(input) {
 	return String(input ?? '')
 		.replace(/[\u2018\u2019\u201A\u201B]/g, '\'')
 		.replace(/[\u201C\u201D\u201E\u201F]/g, '"');
 }
 
+// Tokenizes a partial query so autocomplete can reason about incomplete expressions.
 function tokenizeAdvancedSearchPartial(input) {
 	input = normalizeAdvancedSearchInput(input);
 	const tokens = [];
@@ -411,7 +487,7 @@ function tokenizeAdvancedSearchPartial(input) {
 			continue;
 		}
 
-		if (['>', '<', '='].includes(current)) {
+		if (['>', '<', '=', '~'].includes(current)) {
 			tokens.push({ type: 'operator', value: current, start, end: index + 1, partial: false });
 			index++;
 			continue;
@@ -477,17 +553,20 @@ function tokenizeAdvancedSearchPartial(input) {
 	return tokens;
 }
 
+// Identifies tokens that can act as scalar values in the advanced-search grammar.
 function isAdvancedSearchScalarToken(token) {
 	return token && ['word', 'number', 'string'].includes(token.type);
 }
 
+// Identifies operator tokens, including word-style operators like `has` and `not`.
 function isAdvancedSearchOperatorToken(token) {
 	return token && (
 		token.type === 'operator' ||
-		(token.type === 'word' && ['has', 'have'].includes(token.value.toLowerCase()))
+		(token.type === 'word' && ['has', 'have', 'not'].includes(token.value.toLowerCase()))
 	);
 }
 
+// Builds the fallback AST used when plain text should search against Pokemon names.
 function buildImplicitNameSearchAst(query) {
 	return {
 		type: 'comparison',
@@ -497,6 +576,7 @@ function buildImplicitNameSearchAst(query) {
 	};
 }
 
+// Detects when the input should behave like a simple name search instead of AST syntax.
 function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
 	const query = input.trim();
 	if (!query) {
@@ -516,7 +596,7 @@ function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
 		return null;
 	}
 
-	if (tokens.some(token => token.type === 'word' && ['and', 'or', 'has', 'have'].includes(token.value.toLowerCase()))) {
+	if (tokens.some(token => token.type === 'word' && ['and', 'or', 'has', 'have', 'not'].includes(token.value.toLowerCase()))) {
 		return null;
 	}
 
@@ -533,6 +613,7 @@ function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
 	};
 }
 
+// Parses a query normally and falls back to implicit `name has ...` behavior on failure.
 function parseAdvancedSearchWithFallback(query) {
 	try {
 		return parseAdvancedSearch(query);
@@ -542,6 +623,7 @@ function parseAdvancedSearchWithFallback(query) {
 	}
 }
 
+// Advances autocomplete parser state when the active token already completes a clause.
 function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentAttribute, stack, metadata) {
 	if (!activeToken) {
 		return null;
@@ -550,14 +632,17 @@ function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentA
 	const attribute = currentAttribute ? metadata.byName[normalizeSearchKey(currentAttribute)] : null;
 	switch (state) {
 		case 'expectAttribute':
+			if (activeToken.type === 'word' && activeToken.value.toLowerCase() === 'not') {
+				return { state: 'expectValue', currentAttribute: 'name' };
+			}
 			if (activeToken.type === 'word' && metadata.byName[normalizeSearchKey(activeToken.value)]) {
 				return { state: 'expectOperator', currentAttribute: activeToken.value };
 			}
 			break;
 		case 'expectOperator':
 			if (
-				(activeToken.type === 'operator' && ['=', '==', '!=', '>', '>=', '<', '<='].includes(activeToken.value)) ||
-				(activeToken.type === 'word' && ['has', 'have'].includes(activeToken.value.toLowerCase()))
+				(activeToken.type === 'operator' && ['=', '==', '!=', '>', '>=', '<', '<=', '~'].includes(activeToken.value)) ||
+				(activeToken.type === 'word' && ['has', 'have', 'not'].includes(activeToken.value.toLowerCase()))
 			) {
 				return { state: 'expectValue', currentAttribute };
 			}
@@ -610,12 +695,14 @@ function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentA
 	return null;
 }
 
+// Determines autocomplete context at the cursor, including attribute/value expectations.
 function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 	const tokens = tokenizeAdvancedSearchPartial(input.slice(0, cursorIndex));
 	let activeToken = null;
 	if (tokens.length && tokens[tokens.length - 1].partial) {
 		activeToken = tokens.pop();
 	}
+	const replacementToken = activeToken;
 
 	let state = 'expectAttribute';
 	let currentAttribute = null;
@@ -626,6 +713,11 @@ function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 			case 'expectAttribute':
 				if (token.type === '(') {
 					stack.push('expression');
+					break;
+				}
+				if (token.type === 'word' && token.value.toLowerCase() === 'not') {
+					currentAttribute = 'name';
+					state = 'expectValue';
 					break;
 				}
 				if (token.type === 'word') {
@@ -706,8 +798,8 @@ function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 		}
 	}
 
-	const rangeStart = activeToken ? activeToken.start : cursorIndex;
-	const rangeEnd = activeToken ? activeToken.end : cursorIndex;
+	const replacementStart = replacementToken ? replacementToken.start : cursorIndex;
+	const replacementEnd = replacementToken ? replacementToken.end : cursorIndex;
 	const fragment = activeToken ? activeToken.value : '';
 	const attributeName = currentAttribute ? normalizeSearchKey(currentAttribute) : null;
 
@@ -716,12 +808,15 @@ function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 		stack,
 		activeToken,
 		fragment,
-		rangeStart,
-		rangeEnd,
+		rangeStart: replacementStart,
+		rangeEnd: replacementEnd,
+		replacementStart,
+		replacementEnd,
 		attribute: attributeName ? metadata.byName[attributeName] : null
 	};
 }
 
+// Scores how closely a suggestion matches the typed fragment for ordering results.
 function scoreAdvancedSearchSuggestion(suggestion, fragment) {
 	if (!fragment) {
 		return 0;
@@ -757,6 +852,7 @@ function scoreAdvancedSearchSuggestion(suggestion, fragment) {
 	return 99;
 }
 
+// Filters and sorts suggestion candidates using fragment match quality and category priority.
 function filterAdvancedSearchSuggestions(suggestions, fragment) {
 	const normalizedFragment = normalizeSearchKey(fragment);
 	const rawFragment = String(fragment || '').trim().toLowerCase();
@@ -780,14 +876,15 @@ function filterAdvancedSearchSuggestions(suggestions, fragment) {
 				return scoreDiff;
 			}
 			return left.label.localeCompare(right.label);
-		})
-		.slice(0, 12);
+		});
 }
 
+// Quotes an autocomplete value so it can be inserted safely into the search string.
 function quoteAdvancedSearchValue(value) {
 	return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, '\\\'')}'`;
 }
 
+// Generates value suggestions appropriate for the selected attribute type.
 function buildAdvancedSearchValueSuggestions(attribute) {
 	if (!attribute) {
 		return [];
@@ -810,7 +907,23 @@ function buildAdvancedSearchValueSuggestions(attribute) {
 	}));
 }
 
+// Converts saved query history into autocomplete entries.
+function getAdvancedSearchHistorySuggestions() {
+	return advancedSearchHistory.map(query => ({
+		label: query,
+		insertText: query,
+		meta: 'history',
+		category: 'history',
+		priority: -1
+	}));
+}
+
+// Returns autocomplete suggestions for either history, plain-name mode, or AST mode.
 function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
+	if (!String(input || '').trim()) {
+		return getAdvancedSearchHistorySuggestions();
+	}
+
 	const plainNameContext = getPlainNameSearchAutocompleteContext(input, cursorIndex);
 	if (plainNameContext) {
 		const metadata = buildAdvancedSearchAutocompleteMetadata();
@@ -844,12 +957,15 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 	switch (context.state) {
 		case 'expectAttribute':
 			return filterAdvancedSearchSuggestions(
-				metadata.attributes.map(attribute => ({
-					label: attribute.name,
-					insertText: attribute.name,
-					meta: attribute.kind,
-					category: 'attribute'
-				})),
+				[
+					{ label: 'not', insertText: 'not', meta: 'name operator', category: 'logical', priority: 0 },
+					...metadata.attributes.map(attribute => ({
+						label: attribute.name,
+						insertText: attribute.name,
+						meta: attribute.kind,
+						category: 'attribute'
+					}))
+				],
 				context.fragment
 			);
 		case 'expectOperator':
@@ -858,8 +974,10 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 			}
 			return filterAdvancedSearchSuggestions(
 				(context.attribute.kind === 'number'
-					? ['=', '!=', '>', '>=', '<', '<=']
-					: ['=', '!=', 'has']
+					? ['=', '!=', 'not', '>', '>=', '<', '<=']
+					: (context.attribute.kind === 'list'
+						? ['=', '!=', 'not', 'has', '~']
+						: ['=', '!=', 'not', 'has'])
 				).map(operator => ({
 					label: operator,
 					insertText: operator,
@@ -891,6 +1009,7 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 	}
 }
 
+// Applies a selected suggestion into the input and restores cursor/focus state.
 function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
 	const input = document.getElementById('advancedSearchInput');
 	if (!input || !suggestion) {
@@ -899,6 +1018,15 @@ function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
 
 	const cursorIndex = input.selectionStart ?? input.value.length;
 	const plainNameContext = getPlainNameSearchAutocompleteContext(input.value, cursorIndex);
+	if (suggestion.category === 'history') {
+		input.value = suggestion.insertText;
+		input.focus();
+		input.setSelectionRange(input.value.length, input.value.length);
+		advancedSearchLastInputValue = input.value;
+		refreshAdvancedSearchAutocomplete();
+		return;
+	}
+
 	if (plainNameContext && suggestion.category === 'pokemonNameSearch') {
 		input.value =
 			input.value.slice(0, plainNameContext.rangeStart) +
@@ -936,21 +1064,24 @@ function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
 	}
 
 	const newValue =
-		input.value.slice(0, context.rangeStart) +
+		input.value.slice(0, context.replacementStart) +
 		replacement +
-		input.value.slice(context.rangeEnd);
-	const newCursor = context.rangeStart + replacement.length;
+		input.value.slice(context.replacementEnd);
+	const newCursor = context.replacementStart + replacement.length;
 
 	input.value = newValue;
 	input.focus();
 	input.setSelectionRange(newCursor, newCursor);
+	advancedSearchLastInputValue = input.value;
 	refreshAdvancedSearchAutocomplete();
 }
 
+// Opens the modal that documents the advanced-search syntax.
 function showAdvancedSearchGuide() {
 	$('#advancedSearchGuideModal').modal('show');
 }
 
+// Returns the user-facing ability name, including special handling for As One variants.
 function getAbilityDisplayNameById(abilityId, nameIndex = 0) {
 	if (!abilities || !abilities[abilityId]) {
 		return '';
@@ -967,6 +1098,7 @@ function getAbilityDisplayNameById(abilityId, nameIndex = 0) {
 	return abilities[abilityId].names[nameIndex] || abilities[abilityId].names[0];
 }
 
+// Returns the description text for a given ability id.
 function getAbilityDescriptionById(abilityId) {
 	if (!abilities || !abilities[abilityId]) {
 		return '';
@@ -975,6 +1107,7 @@ function getAbilityDescriptionById(abilityId) {
 	return abilities[abilityId].description;
 }
 
+// Applies normal filters plus the advanced-search predicate to build the live result set.
 function getFilteredSpeciesResults() {
 	let results = Object.values(species);
 	for (const activeFilter of Object.values(filters).reduce((list, filter) => list.concat(filter.active), [])) {
@@ -988,11 +1121,13 @@ function getFilteredSpeciesResults() {
 	return results;
 }
 
+// Renders the current result set and refreshes the advanced-search status message.
 function refreshSpeciesResults() {
-	populateTable('speciesTable', getFilteredSpeciesResults());
+	renderSpeciesResults(getFilteredSpeciesResults());
 	updateAdvancedSearchStatus();
 }
 
+// Updates the search status area with either an error or the current match count.
 function updateAdvancedSearchStatus(message = null, isError = false) {
 	const status = document.getElementById('advancedSearchStatus');
 	if (!status) {
@@ -1015,6 +1150,7 @@ function updateAdvancedSearchStatus(message = null, isError = false) {
 	status.className = 'success';
 }
 
+// Parses and activates the advanced-search query, then refreshes the displayed species.
 function runAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
 	if (!input) {
@@ -1033,6 +1169,8 @@ function runAdvancedSearch() {
 		predicate(Object.values(species)[0]);
 		advancedSearchPredicate = predicate;
 		advancedSearchQuery = query;
+		advancedSearchLastInputValue = input.value;
+		rememberAdvancedSearchQuery(query);
 		hideAdvancedSearchAutocomplete();
 		refreshSpeciesResults();
 	}
@@ -1041,30 +1179,35 @@ function runAdvancedSearch() {
 	}
 }
 
+// Clears the active query, predicate, and autocomplete state back to defaults.
 function clearAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
 	if (input) {
 		input.value = '';
 	}
 
-	advancedSearchPredicate = null;
-	advancedSearchQuery = '';
+	advancedSearchLastInputValue = '';
+	clearAdvancedSearchPredicateState();
 	hideAdvancedSearchAutocomplete();
 	refreshSpeciesResults();
 }
 
+// Normalizes free text for case-insensitive, punctuation-tolerant comparisons.
 function normalizeSearchText(value) {
 	return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+// Normalizes keys for attribute and value lookup without whitespace or punctuation.
 function normalizeSearchKey(value) {
 	return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
+// Deduplicates a list of strings while discarding empty values.
 function uniqStrings(values) {
 	return Array.from(new Set(values.filter(Boolean)));
 }
 
+// Builds the species ability package, applying randomizer and Hardcore overrides when needed.
 function getSpeciesAbilityPackage(mon, hardcoreMode = false) {
 	const cache = hardcoreMode ? abilityPackageCache.hardcore : abilityPackageCache.base;
 	if (cache.has(mon.ID)) {
@@ -1120,6 +1263,7 @@ function getSpeciesAbilityPackage(mon, hardcoreMode = false) {
 	return details;
 }
 
+// Converts a move id into a normalized move detail object for exports and search.
 function buildMoveDetail(moveId, source, level = null) {
 	const move = moves[moveId];
 	if (!move) {
@@ -1143,6 +1287,7 @@ function buildMoveDetail(moveId, source, level = null) {
 	};
 }
 
+// Builds the move row payload shown inside a species detail panel.
 function buildSpeciesPanelMoveEntry(mon, moveId, level = null, raw = false) {
 	const resolvedMoveId = raw ? moveId : getMappedMove(moveId, mon.ID);
 	const move = moves[resolvedMoveId];
@@ -1157,6 +1302,7 @@ function buildSpeciesPanelMoveEntry(mon, moveId, level = null, raw = false) {
 	};
 }
 
+// Returns whether a move remains legal for the species under Hardcore rules.
 function isHardcoreMoveLegal(mon, moveId) {
 	const state = buildHardcoreState();
 	if (state.bannedMoveIds.has(moveId)) {
@@ -1170,6 +1316,7 @@ function isHardcoreMoveLegal(mon, moveId) {
 	return state.restrictedSpeciesIds.has(mon.ID);
 }
 
+// Builds the full learnset package for a species, grouped by acquisition source.
 function getSpeciesMovePackage(mon, hardcoreMode = false) {
 	const cache = hardcoreMode ? movePackageCache.hardcore : movePackageCache.base;
 	if (cache.has(mon.ID)) {
@@ -1243,6 +1390,7 @@ function getSpeciesMovePackage(mon, hardcoreMode = false) {
 	return payload;
 }
 
+// Summarizes which moves were removed from a species in Hardcore mode and why.
 function getSpeciesHardcoreMoveAdjustments(mon) {
 	const baseMoves = getSpeciesMovePackage(mon, false).all;
 	const hardcoreMoves = new Set(getSpeciesMovePackage(mon, true).all.map(move => move.id));
@@ -1269,6 +1417,7 @@ function getSpeciesHardcoreMoveAdjustments(mon) {
 	return removed;
 }
 
+// Formats the species' forward evolutions for display or export.
 function getSpeciesEvolutionEntries(mon) {
 	return (mon.evolutions || []).map(evo => ({
 		to: species[evo[2]]?.key,
@@ -1276,6 +1425,7 @@ function getSpeciesEvolutionEntries(mon) {
 	}));
 }
 
+// Finds the immediate pre-evolution entry for a species, if one exists.
 function getSpeciesPreEvolution(mon) {
 	const parent = Object.values(species).find(candidate =>
 		(candidate.evolutions || []).some(evolution => evolution[2] === mon.ID)
@@ -1292,17 +1442,20 @@ function getSpeciesPreEvolution(mon) {
 	};
 }
 
+// Returns every member of a species family using the shared ancestor id.
 function getSpeciesFamily(mon) {
 	return Object.values(species)
 		.filter(candidate => candidate.ancestor === mon.ancestor)
 		.sort(cmp(x => x.dexID));
 }
 
+// Converts a raw evolution tuple into the human-readable evolution description.
 function describeEvolutionMethod(evolution) {
 	const evo = evolution;
 	return eval(evolutions[evo[0]]);
 }
 
+// Builds the normalized search record used by the advanced-search evaluator.
 function buildSpeciesSearchRecord(mon) {
 	if (speciesSearchCache.has(mon.ID)) {
 		return speciesSearchCache.get(mon.ID);
@@ -1313,6 +1466,8 @@ function buildSpeciesSearchRecord(mon) {
 	const baseMoves = getSpeciesMovePackage(mon, false);
 	const hardcoreMoves = getSpeciesMovePackage(mon, true);
 	const family = getSpeciesFamily(mon).map(relative => relative.key);
+	const locations = getSpeciesLocationNames(mon.ID);
+	const originalLocations = getSpeciesOriginalLocationNames(mon.ID);
 	const record = {
 		name: mon.key,
 		numbers: {
@@ -1346,6 +1501,10 @@ function buildSpeciesSearchRecord(mon) {
 			evolutions: family,
 			item: (mon.items || []).filter(Boolean).map(itemId => items[itemId].name),
 			items: (mon.items || []).filter(Boolean).map(itemId => items[itemId].name),
+			location: locations,
+			locations,
+			locationoriginal: originalLocations,
+			locationsoriginal: originalLocations,
 			egggroup: (mon.eggGroup || []).filter(Boolean).map(groupId => eggGroups[groupId]),
 			egggroups: (mon.eggGroup || []).filter(Boolean).map(groupId => eggGroups[groupId])
 		}
@@ -1355,6 +1514,7 @@ function buildSpeciesSearchRecord(mon) {
 	return record;
 }
 
+// Tokenizes a complete advanced-search query and throws on invalid characters/syntax.
 function tokenizeAdvancedSearch(input) {
 	input = normalizeAdvancedSearchInput(input);
 	const tokens = [];
@@ -1380,7 +1540,7 @@ function tokenizeAdvancedSearch(input) {
 			continue;
 		}
 
-		if (['>', '<', '='].includes(current)) {
+		if (['>', '<', '=', '~'].includes(current)) {
 			tokens.push({ type: 'operator', value: current });
 			index++;
 			continue;
@@ -1435,6 +1595,7 @@ function tokenizeAdvancedSearch(input) {
 	return tokens;
 }
 
+// Parses the advanced-search grammar into an evaluatable AST.
 function parseAdvancedSearch(input) {
 	const tokens = tokenizeAdvancedSearch(input);
 	let index = 0;
@@ -1485,6 +1646,16 @@ function parseAdvancedSearch(input) {
 			return expression;
 		}
 
+		if (matchWord('not')) {
+			consume();
+			return {
+				type: 'comparison',
+				attribute: 'name',
+				operator: 'not',
+				value: parseValue()
+			};
+		}
+
 		return parseComparison();
 	};
 
@@ -1500,7 +1671,7 @@ function parseAdvancedSearch(input) {
 		}
 
 		let operator = operatorToken.value.toLowerCase();
-		if (operatorToken.type !== 'operator' && !['has', 'have'].includes(operator)) {
+		if (operatorToken.type !== 'operator' && !['has', 'have', 'not'].includes(operator)) {
 			throw new Error(`Unsupported operator "${operatorToken.value}".`);
 		}
 
@@ -1582,6 +1753,7 @@ function parseAdvancedSearch(input) {
 	return ast;
 }
 
+// Evaluates the parsed AST against a single species record.
 function evaluateAdvancedSearch(ast, mon) {
 	if (ast.type === 'logical') {
 		if (ast.operator === 'and') {
@@ -1609,6 +1781,7 @@ function evaluateAdvancedSearch(ast, mon) {
 	throw new Error(`Unknown attribute "${ast.attribute}" in advanced search.`);
 }
 
+// Evaluates numeric comparisons such as BST, stats, or dex id checks.
 function evaluateNumberComparison(actual, operator, expected, attribute) {
 	if (typeof expected !== 'number') {
 		throw new Error(`Attribute "${attribute}" only supports numeric comparisons.`);
@@ -1619,6 +1792,7 @@ function evaluateNumberComparison(actual, operator, expected, attribute) {
 		case '==':
 			return actual === expected;
 		case '!=':
+		case 'not':
 			return actual !== expected;
 		case '>':
 			return actual > expected;
@@ -1633,6 +1807,7 @@ function evaluateNumberComparison(actual, operator, expected, attribute) {
 	}
 }
 
+// Evaluates string comparisons such as implicit or explicit name matching.
 function evaluateStringComparison(actual, operator, expected, attribute) {
 	if (Array.isArray(expected) || typeof expected === 'number') {
 		throw new Error(`Attribute "${attribute}" only supports string comparisons.`);
@@ -1646,6 +1821,7 @@ function evaluateStringComparison(actual, operator, expected, attribute) {
 		case '==':
 			return actualValue === expectedValue;
 		case '!=':
+		case 'not':
 			return actualValue !== expectedValue;
 		case 'has':
 			return actualValue.includes(expectedValue);
@@ -1654,131 +1830,200 @@ function evaluateStringComparison(actual, operator, expected, attribute) {
 	}
 }
 
+// Evaluates list comparisons, including exact, contains, include-any, and negation modes.
 function evaluateListComparison(actualList, operator, expected) {
 	const normalizedActual = actualList.map(normalizeSearchText);
 	const expectedValues = Array.isArray(expected) ? expected : [expected];
 	const normalizedExpected = expectedValues.map(value => normalizeSearchText(value));
+	const everyExpectedMatches = matcher => normalizedExpected.every(expectedValue => normalizedActual.some(actualValue => matcher(actualValue, expectedValue)));
+	const anyExpectedMatches = matcher => normalizedExpected.some(expectedValue => normalizedActual.some(actualValue => matcher(actualValue, expectedValue)));
 
 	switch (operator) {
 		case '=':
 		case '==':
+			return everyExpectedMatches((actualValue, expectedValue) => actualValue === expectedValue);
 		case 'has':
-			return normalizedExpected.every(value => normalizedActual.includes(value));
+			return everyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
+		case '~':
+			return anyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
 		case '!=':
-			return normalizedExpected.every(value => !normalizedActual.includes(value));
+		case 'not':
+			return normalizedExpected.every(expectedValue => !normalizedActual.includes(expectedValue));
 		default:
 			throw new Error(`Operator "${operator}" is not valid for list comparisons.`);
 	}
 }
 
-function buildPokemonExport(mon) {
-	const baseAbilities = getSpeciesAbilityPackage(mon, false);
-	const hardcoreAbilities = getSpeciesAbilityPackage(mon, true);
-	const baseMoves = getSpeciesMovePackage(mon, false);
-	const hardcoreMoves = getSpeciesMovePackage(mon, true);
-	const family = getSpeciesFamily(mon).map(relative => relative.key);
-
-	return {
-		id: mon.ID,
-		dexId: mon.dexID,
-		name: mon.key,
-		baseName: mon.name,
-		types: mon.type.map(typeId => types[typeId].name),
-		stats: {
-			hp: mon.stats[0],
-			atk: mon.stats[1],
-			def: mon.stats[2],
-			spe: mon.stats[3],
-			spa: mon.stats[4],
-			spd: mon.stats[5],
-			bst: mon.stats.reduce((total, stat) => total + stat, 0)
-		},
-		abilities: baseAbilities,
-		heldItems: (mon.items || []).filter(Boolean).map(itemId => ({
-			id: itemId,
-			name: items[itemId].name,
-			description: items[itemId].description
-		})),
-		eggGroups: (mon.eggGroup || []).filter(Boolean).map(groupId => eggGroups[groupId]),
-		evolution: {
-			preEvolution: getSpeciesPreEvolution(mon),
-			nextEvolutions: getSpeciesEvolutionEntries(mon),
-			family
-		},
-		changes: mon.changes || null,
-		movesetSummary: baseMoves.summary,
-		movesetDetailed: baseMoves.all,
-		learnsets: baseMoves.bySource,
-		hardcore: {
-			abilities: hardcoreAbilities,
-			removedMoves: getSpeciesHardcoreMoveAdjustments(mon),
-			movesetSummary: hardcoreMoves.summary,
-			movesetDetailed: hardcoreMoves.all,
-			learnsets: hardcoreMoves.bySource
-		}
-	};
+// Clears only the active predicate/query state without touching the input element.
+function clearAdvancedSearchPredicateState() {
+	advancedSearchPredicate = null;
+	advancedSearchQuery = '';
+	updateAdvancedSearchStatus();
 }
 
-function exportPokemonData() {
-	const payload = {
-		meta: {
-			repo,
-			version,
-			exportedAt: new Date().toISOString(),
-			advancedSearchQuery,
-			hardcoreRules: {
-				globallyBannedMoves: HARDCORE_BANNED_MOVES,
-				restrictedMoves: HARDCORE_RESTRICTED_MOVES,
-				restrictedSpeciesCount: HARDCORE_RESTRICTED_SPECIES_IDS.length,
-				abilityReplacements: HARDCORE_ABILITY_REPLACEMENTS
+// Recursively collects species ids from mixed encounter/location data structures.
+function collectAdvancedSearchAreaSpeciesIds(value, speciesIds = new Set()) {
+	if (Array.isArray(value)) {
+		const looksLikeEncounterTuple =
+			value.length > 0 &&
+			value.length <= 3 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID &&
+			value.slice(1).every(level => typeof level === 'number' && level >= 0 && level <= 100);
+		const looksLikeRaidTuple =
+			value.length === 2 &&
+			typeof value[0] === 'number' &&
+			value[0] > 0 &&
+			value[0] <= ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID &&
+			Array.isArray(value[1]);
+
+		if (looksLikeEncounterTuple || looksLikeRaidTuple) {
+			speciesIds.add(value[0]);
+			return speciesIds;
+		}
+
+		if (value.length > 0 && value.every(entry => typeof entry === 'number')) {
+			for (const speciesId of value) {
+				if (speciesId > 0 && speciesId <= ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID) {
+					speciesIds.add(speciesId);
+				}
 			}
-		},
-		pokemon: Object.values(species).map(buildPokemonExport)
-	};
-
-	const storedSaveData = getStoredExportSaveData();
-	const saveName = sanitizeExportFileName(storedSaveData?.name);
-	const fileName = saveName ? `rr-dex-export-${saveName}.json` : 'rr-dex-export.json';
-	const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-	const link = document.createElement('a');
-	const url = URL.createObjectURL(blob);
-	link.href = url;
-	link.download = fileName;
-	link.style.display = 'none';
-	document.body.appendChild(link);
-	link.click();
-	setTimeout(() => {
-		URL.revokeObjectURL(url);
-		link.remove();
-	}, 60000);
-}
-
-function getStoredExportSaveData() {
-	if (saveData?.name) {
-		return saveData;
-	}
-
-	try {
-		const raw = localStorage.getItem('saveData');
-		if (!raw) {
-			return null;
+			return speciesIds;
 		}
-		return JSON.parse(raw);
+
+		for (const entry of value) {
+			collectAdvancedSearchAreaSpeciesIds(entry, speciesIds);
+		}
+		return speciesIds;
 	}
-	catch {
-		return null;
+
+	if (value && typeof value === 'object') {
+		for (const nested of Object.values(value)) {
+			collectAdvancedSearchAreaSpeciesIds(nested, speciesIds);
+		}
 	}
+
+	return speciesIds;
 }
 
-function sanitizeExportFileName(name) {
-	if (!name) {
-		return '';
+// Returns whether a location bucket should count as an obtainable encounter source.
+function isAdvancedSearchLocationBucket(bucket) {
+	return bucket.includes('wild') || bucket.includes('fixed') || bucket.startsWith('raid') || bucket.includes('gift');
+}
+
+// Normalizes area + bucket labels into the display names used by location search.
+function formatAdvancedSearchLocationName(areaName, bucket) {
+	if (bucket.startsWith('raid')) {
+		const starMatch = bucket.match(/^raid(\d+)$/);
+		if (starMatch) {
+			return `${areaName} Raid Dens (${Number(starMatch[1])}-star)`;
+		}
+		return `${areaName} Raid Dens`;
 	}
 
-	return String(name)
-		.trim()
-		.replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
-		.replace(/\s+/g, '-')
-		.replace(/-+/g, '-')
-		.replace(/^-|-$/g, '');
+	if (bucket.includes('gift')) {
+		return `${areaName} Gift`;
+	}
+
+	return areaName;
+}
+
+// Sorts location entries into a stable order for display and search indexing.
+function sortAdvancedSearchLocationEntries(entries) {
+	return [...entries].sort((left, right) =>
+		(left.areaName || left.name || '').localeCompare(right.areaName || right.name || '') ||
+		(left.areaId || 0) - (right.areaId || 0) ||
+		(left.name || '').localeCompare(right.name || '')
+	);
+}
+
+// Returns canonical encounter entries for an original, non-randomized species id.
+function getOriginalSpeciesLocationEntries(speciesId) {
+	if (typeof getDirectSpeciesAreas === 'function') {
+		return getDirectSpeciesAreas(speciesId) || [];
+	}
+
+	if (typeof getSpeciesLocationIndex === 'function') {
+		return getSpeciesLocationIndex().get(speciesId) || [];
+	}
+
+	return [];
+}
+
+// Returns encounter entries after applying the active save's species randomizer mapping.
+function getResolvedSpeciesLocationEntries(speciesId) {
+	if (saveData?.random?.normalSpecies && typeof getRandomizedSpeciesAreas === 'function') {
+		return getRandomizedSpeciesAreas(speciesId) || [];
+	}
+
+	return getOriginalSpeciesLocationEntries(speciesId);
+}
+
+// Builds a cached lookup from species id to searchable location names.
+function buildAdvancedSearchLocationIndex(useResolvedLocations = true) {
+	const cachedIndex = useResolvedLocations
+		? advancedSearchResolvedLocationIndex
+		: advancedSearchOriginalLocationIndex;
+	if (cachedIndex) {
+		return cachedIndex;
+	}
+
+	const locationIndex = new Map();
+	const locationNames = new Set(['None']);
+	const getEntries = useResolvedLocations
+		? getResolvedSpeciesLocationEntries
+		: getOriginalSpeciesLocationEntries;
+
+	for (const mon of Object.values(species || {})) {
+		if (!mon || typeof mon.ID !== 'number') {
+			continue;
+		}
+
+		const entries = sortAdvancedSearchLocationEntries(getEntries(mon.ID));
+		if (!entries.length) {
+			continue;
+		}
+
+		locationIndex.set(mon.ID, entries);
+		for (const entry of entries) {
+			if (entry?.name) {
+				locationNames.add(entry.name);
+			}
+		}
+	}
+
+	if (useResolvedLocations) {
+		advancedSearchResolvedLocationIndex = locationIndex;
+		advancedSearchResolvedLocationNames = sortSearchValues(Array.from(locationNames));
+		return advancedSearchResolvedLocationIndex;
+	}
+
+	advancedSearchOriginalLocationIndex = locationIndex;
+	advancedSearchOriginalLocationNames = sortSearchValues(Array.from(locationNames));
+	return advancedSearchOriginalLocationIndex;
+}
+
+// Returns the searchable location names for the active save context.
+function getAdvancedSearchLocationNames() {
+	buildAdvancedSearchLocationIndex(true);
+	return advancedSearchResolvedLocationNames || [];
+}
+
+// Returns the searchable location names from the original, non-randomized game data.
+function getAdvancedSearchOriginalLocationNames() {
+	buildAdvancedSearchLocationIndex(false);
+	return advancedSearchOriginalLocationNames || [];
+}
+
+// Returns displayable location names for one species in the active save context.
+function getSpeciesLocationNames(speciesId) {
+	const entries = buildAdvancedSearchLocationIndex(true).get(speciesId) || [];
+	return entries.length ? uniqStrings(entries.map(entry => entry.name)) : ['None'];
+}
+
+// Returns displayable original-game location names for one species.
+function getSpeciesOriginalLocationNames(speciesId) {
+	const entries = buildAdvancedSearchLocationIndex(false).get(speciesId) || [];
+	return entries.length ? uniqStrings(entries.map(entry => entry.name)) : ['None'];
 }

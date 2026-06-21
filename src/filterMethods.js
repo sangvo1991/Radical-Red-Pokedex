@@ -306,7 +306,7 @@ function addFilter(filter, option) {
 	activeFiltersDisplay.append(active.button);
 
 	let results = getFilteredSpeciesResults();
-	populateTable('speciesTable', results);
+	renderSpeciesResults(results);
 
 	if (results.length === 1) {//&& filter.name === 'Name') {
 		removeFilter(filter, active);
@@ -319,7 +319,7 @@ function removeFilter(filter, active) {
 
 	filter.active.splice(filter.active.findIndex(x => x.option == active.option), 1);
 
-	populateTable('speciesTable', getFilteredSpeciesResults());
+	renderSpeciesResults(getFilteredSpeciesResults());
 }
 
 function removeFilters() {

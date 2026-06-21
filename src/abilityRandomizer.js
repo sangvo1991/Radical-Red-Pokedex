@@ -328,6 +328,28 @@ function getMappedMove(move, species) {
 
 const NAME_OFFSET = 0x000;
 const TRAINED_ID_OFFSET = 0x00A;
+const SAVE_SECTOR_COUNT = 14;
+const SAVE_SLOT_COUNT = 2;
+const SAVE_SECTOR_SIZE = 0x1000;
+const SAVE_SECTOR_DATA_SIZE = 0xFF4;
+const TRAINER_INFO_LOGICAL_OFFSET = 0x0000;
+const GAME_SPECIFIC_LOGICAL_OFFSET = SAVE_SECTOR_DATA_SIZE * 4;
+const PARTY_COUNT_LOGICAL_OFFSET = SAVE_SECTOR_DATA_SIZE + 0x34;
+const PARTY_POKEMON_LOGICAL_OFFSET = SAVE_SECTOR_DATA_SIZE + 0x38;
+const PARTY_POKEMON_SIZE = 100;
+const PARTY_POKEMON_CAPACITY = 6;
+const PARTY_POKEMON_SPECIES_OFFSET = 0x20;
+const PARTY_POKEMON_MOVES_OFFSET = 0x2C;
+const PARTY_POKEMON_MOVE_COUNT = 4;
+const BOX_STORAGE_LOGICAL_OFFSET = SAVE_SECTOR_DATA_SIZE * 5 + 0x04;
+const BOX_POKEMON_SIZE = 58;
+const BOX_POKEMON_SPECIES_OFFSET = 0x1C;
+const BOX_CAPACITY = 30;
+const BOX_COUNT = 25;
+const POKEMON_NAME_OFFSET = 0x08;
+const POKEMON_NAME_LENGTH = 10;
+const MAX_SPECIES_ID = 1375;
+const DITTO_SPECIES_ID = 132;
 // RAM 0203B25A 0x10 = Hardmode
 // RAM 0203B25A 0x04 = MGM
 const HARDMODE_BITFLAG = 0xDB2;
@@ -339,11 +361,77 @@ const SCALED_SPECIES_BITFLAG = 0xF2B;
 // RAM 0203B17C 0x2 = Learnset
 // RAM 0203B17C 0x4 = Ability
 const NORMAL_SPECIES_LEARNSET_ABILITY_BITFLAG = 0xF2C;
+const EVENT_FLAG_BASE = 0xEE0;
+const RANDOMIZER_SPECIES_EVENT_FLAGS = [
+    0x53,
+    0x821,
+    0x823,
+    0x825,
+    0x827,
+    0x930,
+    0x93A,
+    0x940,
+    0x94F,
+    0x103E,
+    0x104A,
+    0x104E,
+];
+
+function formatRandomizerFlagKey(flagId) {
+    return "0x" + flagId.toString(16).toLowerCase();
+}
+
+function readRandomizerSaveEventFlag(file, flagId) {
+    const byteIndex = TRAINER_INFO_LOGICAL_OFFSET + EVENT_FLAG_BASE + (flagId >> 3);
+    const bitIndex = flagId & 7;
+    return ((file.getUint8(byteIndex) >> bitIndex) & 1) === 1;
+}
+
+function readSpeciesRandomizerEventFlags(file) {
+    return Object.fromEntries(
+        RANDOMIZER_SPECIES_EVENT_FLAGS.map(flagId => [formatRandomizerFlagKey(flagId), readRandomizerSaveEventFlag(file, flagId)])
+    );
+}
+
+function inferSpeciesRandomizerBranchFromFlags(eventFlags) {
+    const hasFlag = flagId => Boolean(eventFlags[formatRandomizerFlagKey(flagId)]);
+    let activeBranchKey = null;
+
+    if (!hasFlag(0x930) && hasFlag(0x104E)) {
+        activeBranchKey = "direct_1032";
+    } else if (!hasFlag(0x930) && hasFlag(0x827) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_1032";
+    } else if (!hasFlag(0x930) && hasFlag(0x825) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_979";
+    } else if (!hasFlag(0x930) && hasFlag(0x53) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_927";
+    } else if (!hasFlag(0x930) && hasFlag(0x823) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_904";
+    } else if (!hasFlag(0x930) && hasFlag(0x821) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_569";
+    } else if (!hasFlag(0x930) && hasFlag(0x93A)) {
+        activeBranchKey = "direct_330";
+    } else if (!hasFlag(0x930) && hasFlag(0x940)) {
+        activeBranchKey = "direct_1032";
+    } else if (!hasFlag(0x930) && hasFlag(0x94F)) {
+        activeBranchKey = "special_132_a";
+    } else if (!hasFlag(0x930) && hasFlag(0x103E)) {
+        activeBranchKey = "special_132_b";
+    } else if (hasFlag(0x104A)) {
+        activeBranchKey = "special_921";
+    }
+
+    return {
+        eventFlags,
+        branchCandidates: activeBranchKey ? [activeBranchKey] : [],
+        activeBranchKey,
+    };
+}
 
 function findSector(file, id) {
     let latestOffset = -1;
     let latestSaveIndex = -1;
-    for (let x = 0x0; x < 0x1C000; x += 0x1000) {
+    for (let x = 0x0; x < SAVE_SECTOR_COUNT * SAVE_SLOT_COUNT * SAVE_SECTOR_SIZE; x += SAVE_SECTOR_SIZE) {
         const sectorId = file.getUint16(x + 0xFF4, true);
         const saveIndex = file.getUint32(x + 0xFFC, true);
         if (sectorId === id && saveIndex > latestSaveIndex) {
@@ -355,39 +443,213 @@ function findSector(file, id) {
     return latestOffset;
 }
 
-function readDataFromSaveFile(file) {
-    for (let sectorId = 0; sectorId < 14; sectorId++) {
-        if (findSector(file, sectorId) == -1) {
-            return {
-                valid: false,
-                data: null,
-            }
+function buildLogicalSaveData(file) {
+    const logicalBuffer = new ArrayBuffer(SAVE_SECTOR_COUNT * SAVE_SECTOR_DATA_SIZE);
+    const logicalBytes = new Uint8Array(logicalBuffer);
+    const sourceBytes = new Uint8Array(file.buffer, file.byteOffset, file.byteLength);
+
+    for (let sectorId = 0; sectorId < SAVE_SECTOR_COUNT; sectorId++) {
+        const sectorOffset = findSector(file, sectorId);
+        if (sectorOffset == -1) {
+            return null;
         }
+
+        const logicalOffset = sectorId * SAVE_SECTOR_DATA_SIZE;
+        logicalBytes.set(sourceBytes.subarray(sectorOffset, sectorOffset + SAVE_SECTOR_DATA_SIZE), logicalOffset);
     }
 
-    const trainerInfo = findSector(file, 0x0);
-    const trainedId = file.getUint32(trainerInfo + TRAINED_ID_OFFSET, true);
-    let name = "";
-    for (let idx = 0; idx < 8; idx++) {
-        const char = file.getUint8(trainerInfo + NAME_OFFSET + idx);
-        if (char == 0xFF) {
+    return new DataView(logicalBuffer);
+}
+
+function readEncodedSaveString(file, offset, maxLength) {
+    let value = "";
+    for (let idx = 0; idx < maxLength; idx++) {
+        const char = file.getUint8(offset + idx);
+        if (char == 0xFF || char == 0x00) {
             break;
         }
-        name += CHARACTER_ENCODINGS[char];
+        value += CHARACTER_ENCODINGS[char] || "";
     }
 
-    const scaledBitflag = file.getUint8(trainerInfo + SCALED_SPECIES_BITFLAG);
+    return value;
+}
+
+function readPartyPokemonFromSave(file, slotIndex) {
+    const entryOffset = PARTY_POKEMON_LOGICAL_OFFSET + slotIndex * PARTY_POKEMON_SIZE;
+    const speciesId = file.getUint16(entryOffset + PARTY_POKEMON_SPECIES_OFFSET, true);
+    if (speciesId == 0) {
+        return null;
+    }
+
+    const moveIds = [];
+    for (let moveIndex = 0; moveIndex < PARTY_POKEMON_MOVE_COUNT; moveIndex++) {
+        const moveId = file.getUint16(entryOffset + PARTY_POKEMON_MOVES_OFFSET + moveIndex * 2, true);
+        if (moveId > 0) {
+            moveIds.push(moveId);
+        }
+    }
+
+    return {
+        slot: slotIndex + 1,
+        speciesId,
+        nickname: readEncodedSaveString(file, entryOffset + POKEMON_NAME_OFFSET, POKEMON_NAME_LENGTH),
+        moveIds,
+    };
+}
+
+function readBoxPokemonFromSave(file) {
+    const boxes = Array.from({length: BOX_COUNT}, (_, idx) => ({
+        box: idx + 1,
+        pokemon: [],
+    }));
+
+    for (let slotIndex = 0; slotIndex < BOX_COUNT * BOX_CAPACITY; slotIndex++) {
+        // Radical Red stores PC data as a wrapped logical stream, so late boxes
+        // continue at the start of the logical save instead of stopping at sector 13.
+        const entryOffset = (BOX_STORAGE_LOGICAL_OFFSET + slotIndex * BOX_POKEMON_SIZE) % file.byteLength;
+        const speciesId = file.getUint16(entryOffset + BOX_POKEMON_SPECIES_OFFSET, true);
+        if (speciesId == 0) {
+            continue;
+        }
+
+        boxes[Math.floor(slotIndex / BOX_CAPACITY)].pokemon.push({
+            slot: slotIndex % BOX_CAPACITY + 1,
+            speciesId,
+            nickname: readEncodedSaveString(file, entryOffset + POKEMON_NAME_OFFSET, POKEMON_NAME_LENGTH),
+        });
+    }
+
+    return boxes;
+}
+
+function getSavePokemonDisplayName(entry) {
+    if (!entry) {
+        return "";
+    }
+
+    if (!!species && !!species[entry.speciesId]) {
+        return species[entry.speciesId].name;
+    }
+
+    return entry.nickname || `#${entry.speciesId}`;
+}
+
+function createSavePokemonChip(entry) {
+    const chip = document.createElement("span");
+    chip.className = "savePokemonChip";
+    chip.innerText = getSavePokemonDisplayName(entry);
+
+    if (!!species && !!species[entry.speciesId]) {
+        chip.classList.add("savePokemonChipInteractive");
+        chip.onclick = function() {
+            displaySpeciesPanel(species[entry.speciesId], entry);
+        };
+    }
+
+    return chip;
+}
+
+function renderCurrentSavePokemonList(container, pokemon) {
+    if (pokemon.length == 0) {
+        container.innerText = "None";
+        return;
+    }
+
+    container.replaceChildren(...pokemon.map(createSavePokemonChip));
+}
+
+function renderCurrentSavePokemon() {
+    const wrapper = document.getElementById("currentSavePokemon");
+    const teamCount = document.getElementById("currentSaveTeamCount");
+    const teamList = document.getElementById("currentSaveTeamList");
+    const boxesCount = document.getElementById("currentSaveBoxesCount");
+    const boxesList = document.getElementById("currentSaveBoxesList");
+
+    if (!wrapper || !teamCount || !teamList || !boxesCount || !boxesList) {
+        return;
+    }
+
+    if (typeof getAppearanceSetting === "function" && !getAppearanceSetting("currentTeamVisible", true)) {
+        wrapper.classList.add("hide");
+        return;
+    }
+
+    if (!saveData || !Array.isArray(saveData.party) || !Array.isArray(saveData.boxes)) {
+        wrapper.classList.add("hide");
+        teamList.replaceChildren();
+        boxesList.replaceChildren();
+        return;
+    }
+
+    const party = saveData.party;
+    const boxes = saveData.boxes.filter(box => box.pokemon.length > 0);
+    const boxedPokemonCount = boxes.reduce((count, box) => count + box.pokemon.length, 0);
+
+    teamCount.innerText = party.length;
+    boxesCount.innerText = boxedPokemonCount;
+    renderCurrentSavePokemonList(teamList, party);
+
+    if (boxes.length == 0) {
+        boxesList.innerText = "No boxed Pokemon found.";
+    } else {
+        const boxSections = boxes.map(box => {
+            const section = document.createElement("div");
+            section.className = "saveBoxSection";
+
+            const title = document.createElement("span");
+            title.className = "saveBoxTitle";
+            title.innerText = `Box ${box.box} (${box.pokemon.length})`;
+
+            const pokemonList = document.createElement("div");
+            pokemonList.className = "savePokemonList";
+            pokemonList.replaceChildren(...box.pokemon.map(createSavePokemonChip));
+
+            section.replaceChildren(title, pokemonList);
+            return section;
+        });
+
+        boxesList.replaceChildren(...boxSections);
+    }
+
+    wrapper.classList.remove("hide");
+}
+
+function readDataFromSaveFile(file) {
+    const logicalSave = buildLogicalSaveData(file);
+    if (!logicalSave) {
+        return {
+            valid: false,
+            data: null,
+        }
+    }
+
+    const trainerInfo = TRAINER_INFO_LOGICAL_OFFSET;
+    const trainedId = logicalSave.getUint32(trainerInfo + TRAINED_ID_OFFSET, true);
+    const name = readEncodedSaveString(logicalSave, trainerInfo + NAME_OFFSET, 8);
+
+    const scaledBitflag = logicalSave.getUint8(trainerInfo + SCALED_SPECIES_BITFLAG);
     const scaledSpecies = (scaledBitflag & 0x4) > 0;
-    const randomBitFlag = file.getUint8(trainerInfo + NORMAL_SPECIES_LEARNSET_ABILITY_BITFLAG);
+    const randomBitFlag = logicalSave.getUint8(trainerInfo + NORMAL_SPECIES_LEARNSET_ABILITY_BITFLAG);
     const normalSpecies = (randomBitFlag & 0x1) > 0;
     const learnset = (randomBitFlag & 0x2) > 0;
     const abilities = (randomBitFlag & 0x4) > 0;
+    const speciesRandomizerState = inferSpeciesRandomizerBranchFromFlags(readSpeciesRandomizerEventFlags(logicalSave));
 
-    const gameSpecificData = findSector(file, 0x4);
-    const hardmodeBitflag = file.getUint8(gameSpecificData + HARDMODE_BITFLAG);
+    const gameSpecificData = GAME_SPECIFIC_LOGICAL_OFFSET;
+    const hardmodeBitflag = logicalSave.getUint8(gameSpecificData + HARDMODE_BITFLAG);
     const hardmode = (hardmodeBitflag & 0x10) > 0;
-    const restrictedBitFlag = file.getUint8(gameSpecificData + RESTRICTED_BITFLAG);
+    const restrictedBitFlag = logicalSave.getUint8(gameSpecificData + RESTRICTED_BITFLAG);
     const restricted = (restrictedBitFlag & 0x40) > 0;
+    const rawPartyCount = logicalSave.getUint32(PARTY_COUNT_LOGICAL_OFFSET, true);
+    const partyCount = Math.min(PARTY_POKEMON_CAPACITY, Math.max(0, rawPartyCount));
+    const party = [];
+
+    for (let slotIndex = 0; slotIndex < partyCount; slotIndex++) {
+        const pokemon = readPartyPokemonFromSave(logicalSave, slotIndex);
+        if (pokemon) {
+            party.push(pokemon);
+        }
+    }
 
     return {
         valid: true,
@@ -396,18 +658,26 @@ function readDataFromSaveFile(file) {
             trainedId,
             restricted,
             hardmode,
+            party,
+            boxes: readBoxPokemonFromSave(logicalSave),
             random: {
                 abilities,
                 learnset,
                 normalSpecies,
                 scaledSpecies,
+                speciesBranchKey: speciesRandomizerState.activeBranchKey,
+                speciesBranchCandidates: speciesRandomizerState.branchCandidates,
+                speciesEventFlags: speciesRandomizerState.eventFlags,
             }
         }
     }
 }
 
 function openSaveFileDialog() {
-    document.getElementById("saveFileInput").click();
+    const input = document.getElementById("saveFileInput");
+    if (input) {
+        input.click();
+    }
 }
 
 function clearCurrentSave() {
@@ -416,7 +686,14 @@ function clearCurrentSave() {
 
 function processSaveData(data) {
     saveData = data;
-    localStorage.setItem("saveData", JSON.stringify(saveData));
+    if (data) {
+        localStorage.setItem("saveData", JSON.stringify(saveData));
+    } else {
+        localStorage.removeItem("saveData");
+    }
+    if (typeof resetDisplayLocationCaches === "function") {
+        resetDisplayLocationCaches();
+    }
     if (typeof resetAdvancedFeatureCaches === "function") {
         resetAdvancedFeatureCaches();
     }
@@ -436,21 +713,34 @@ function processSaveData(data) {
         if (data.random.learnset) {
             flags.push("Random Learnset");
         }
+        if (data.random.normalSpecies) {
+            flags.push("Random Species");
+        }
 
         if (flags.length == 0) {
             flags.push("No changes");
         }
 
-        document.getElementById("currentSave").classList.remove("hide");
-        document.getElementById("saveFileInputButton").classList.add("hide");
-        document.getElementById("currentSaveName").innerText = data.name;
-        document.getElementById("currentSaveFlags").innerText = flags.join(" / ");
+        document.getElementById("currentSave")?.classList.remove("hide");
+        document.getElementById("saveFileInputButton")?.classList.add("hide");
+        const currentSaveName = document.getElementById("currentSaveName");
+        const currentSaveFlags = document.getElementById("currentSaveFlags");
+        if (currentSaveName) {
+            currentSaveName.innerText = data.name;
+        }
+        if (currentSaveFlags) {
+            currentSaveFlags.innerText = flags.join(" / ");
+        }
     } else {
-        document.getElementById("currentSave").classList.add("hide");
-        document.getElementById("saveFileInputButton").classList.remove("hide");
+        document.getElementById("currentSave")?.classList.add("hide");
+        document.getElementById("saveFileInputButton")?.classList.remove("hide");
+    }
+    renderCurrentSavePokemon();
+    if (typeof onSaveDataProcessed === "function") {
+        onSaveDataProcessed(data);
     }
 
-    if (!!species) {
+    if (!!species && typeof removeFilters === "function" && document.getElementById("speciesTable")) {
         removeFilters();
         if (typeof refreshSpeciesResults === "function") {
             refreshSpeciesResults();
@@ -460,24 +750,31 @@ function processSaveData(data) {
     }
 }
 
-document.getElementById("saveFileInput").addEventListener("change", function() {
-    const saveFileInput = document.getElementById("saveFileInput");
-    var [file] = saveFileInput.files;
-    if (file) {
-        saveFileInput.value = null;
-        file.arrayBuffer().then(buffer => {
-            const view = new DataView(buffer);
-            const {valid, data} = readDataFromSaveFile(view);
-            if(!valid) {
-                alert("Unable to read save data. Please ensure you've selected a save and not a save state (Most likely a .sav file)");
-                return;
-            }
-            processSaveData(data);
-        })
-    }
-});
+const saveFileInputElement = document.getElementById("saveFileInput");
+if (saveFileInputElement) {
+    saveFileInputElement.addEventListener("change", function() {
+        const saveFileInput = document.getElementById("saveFileInput");
+        var [file] = saveFileInput.files;
+        if (file) {
+            saveFileInput.value = null;
+            file.arrayBuffer().then(buffer => {
+                const view = new DataView(buffer);
+                const {valid, data} = readDataFromSaveFile(view);
+                if(!valid) {
+                    alert("Unable to read save data. Please ensure you've selected a save and not a save state (Most likely a .sav file)");
+                    return;
+                }
+                processSaveData(data);
+            })
+        }
+    });
+}
 
 const storedSaveData = localStorage.getItem("saveData");
 if (storedSaveData) {
-    processSaveData(JSON.parse(storedSaveData));
+    try {
+        processSaveData(JSON.parse(storedSaveData));
+    } catch (error) {
+        localStorage.removeItem("saveData");
+    }
 }

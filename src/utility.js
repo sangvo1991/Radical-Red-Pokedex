@@ -1,3 +1,34 @@
+const APPEARANCE_SETTINGS_STORAGE_KEY = 'appearanceSettings';
+
+function readAppearanceSettingsFromStorage() {
+  try {
+    const raw = localStorage.getItem(APPEARANCE_SETTINGS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAppearanceSettingsToStorage(settings) {
+  try {
+    localStorage.setItem(APPEARANCE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {}
+}
+
+function getAppearanceSetting(key, fallback) {
+  if (appearanceSettings && Object.prototype.hasOwnProperty.call(appearanceSettings, key)) {
+    return appearanceSettings[key];
+  }
+
+  const storedSettings = readAppearanceSettingsFromStorage();
+  if (Object.prototype.hasOwnProperty.call(storedSettings, key)) {
+    return storedSettings[key];
+  }
+
+  return fallback;
+}
+
 function getAbilityName(ability, species, raw = false) {
   if (ability[0] === 0) return undefined;
 
@@ -30,6 +61,9 @@ function getFullLearnset(mon) {
 
 function getSprite(ID) {
   let sprite = sprites[ID];
+  if (sprite === undefined && species?.[ID]) {
+    sprite = `graphics/species/front/${ID}.png`;
+  }
   if (sprite === undefined) sprite = sprites[0];
   return sprite;
 }

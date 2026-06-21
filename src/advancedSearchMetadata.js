@@ -30,6 +30,10 @@ const ADVANCED_SEARCH_ATTRIBUTE_CONFIG = {
 	evolutions: { kind: 'list', valuesKey: 'speciesNames' },
 	item: { kind: 'list', valuesKey: 'itemNames' },
 	items: { kind: 'list', valuesKey: 'itemNames' },
+	location: { kind: 'list', valuesKey: 'locationNames' },
+	locations: { kind: 'list', valuesKey: 'locationNames' },
+	locationoriginal: { kind: 'list', valuesKey: 'locationOriginalNames' },
+	locationsoriginal: { kind: 'list', valuesKey: 'locationOriginalNames' },
 	egggroup: { kind: 'list', valuesKey: 'eggGroupNames' },
 	egggroups: { kind: 'list', valuesKey: 'eggGroupNames' }
 };

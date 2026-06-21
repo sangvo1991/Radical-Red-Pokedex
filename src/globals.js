@@ -21,5 +21,9 @@ saveData = null;
 
 let trackers = {};
 let filters = {};
+let appearanceSettings = {
+	currentTeamVisible: true,
+	locationBaseOrder: false
+};
 
 let scrollIntoView = true;
