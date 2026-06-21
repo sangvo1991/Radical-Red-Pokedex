@@ -24,7 +24,10 @@ let filters = {};
 let appearanceSettings = {
 	currentTeamVisible: true,
 	locationBaseOrder: false,
-	hardcoreChangesVisible: true
+	allowTextSelection: false,
+	hardcoreChangesVisible: true,
+	disableValueSuggestions: false,
+	availableOnly: false
 };
 let appearanceSettingsLoaded = false;
 

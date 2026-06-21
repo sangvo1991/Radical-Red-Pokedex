@@ -22,7 +22,9 @@ function loadAppearanceSettings() {
 		currentTeamVisible: storedSettings.currentTeamVisible !== false,
 		locationBaseOrder: storedSettings.locationBaseOrder === true,
 		allowTextSelection: storedSettings.allowTextSelection === true,
-		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false
+		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false,
+		disableValueSuggestions: storedSettings.disableValueSuggestions === true,
+		availableOnly: storedSettings.availableOnly === true
 	};
 	appearanceSettingsLoaded = true;
 }
@@ -50,6 +52,16 @@ function isTextSelectionEnabled() {
 // Returns whether the modal should show Hardcore-specific ability and original-species details.
 function isHardcoreChangesVisibleEnabled() {
 	return appearanceSettings.hardcoreChangesVisible !== false;
+}
+
+// Returns whether advanced search should suppress value/history suggestions.
+function areAdvancedSearchValueSuggestionsDisabled() {
+	return appearanceSettings.disableValueSuggestions === true;
+}
+
+// Returns whether species lists should always be filtered to obtainable Pokemon.
+function isAvailableOnlyEnabled() {
+	return appearanceSettings.availableOnly === true;
 }
 
 // Updates the current team visibility setting and rerenders the save panel if needed.
@@ -96,6 +108,28 @@ function setHardcoreChangesVisible(enabled, persist = true) {
 	}
 }
 
+// Toggles value suggestions inside advanced search without affecting attribute/operator hints.
+function setAdvancedSearchValueSuggestionsDisabled(enabled, persist = true) {
+	appearanceSettings.disableValueSuggestions = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	updateAppearanceSettingsControls();
+	if (currentSearchMode === 'advanced' && typeof refreshAdvancedSearchAutocomplete === 'function') {
+		refreshAdvancedSearchAutocomplete();
+	}
+}
+
+// Forces the species list to only show obtainable Pokemon in both search modes.
+function setAvailableOnlyEnabled(enabled, persist = true) {
+	appearanceSettings.availableOnly = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	updateAppearanceSettingsControls();
+	refreshSpeciesResults();
+}
+
 // Applies all persisted appearance settings to the live page state.
 function applyAppearanceSettings() {
 	applyTextSelectionSetting();
@@ -116,6 +150,9 @@ function updateAppearanceSettingsControls() {
 	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
 	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
+	const disableValueSuggestionsOption = document.getElementById('appearanceDisableValueSuggestionsOption');
+	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
+	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
 	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
@@ -128,6 +165,16 @@ function updateAppearanceSettingsControls() {
 	}
 	if (currentTeamToggle) {
 		currentTeamToggle.checked = isCurrentTeamVisibleEnabled();
+	}
+	if (disableValueSuggestionsOption) {
+		disableValueSuggestionsOption.classList.toggle('hide', currentSearchMode !== 'advanced');
+	}
+	if (disableValueSuggestionsToggle) {
+		disableValueSuggestionsToggle.checked = areAdvancedSearchValueSuggestionsDisabled();
+		disableValueSuggestionsToggle.disabled = currentSearchMode !== 'advanced';
+	}
+	if (availableOnlyToggle) {
+		availableOnlyToggle.checked = isAvailableOnlyEnabled();
 	}
 	if (locationBaseOrderToggle) {
 		locationBaseOrderToggle.checked = isLocationBaseOrderEnabled();
@@ -219,6 +266,8 @@ function setupAppearanceSettingsMenu() {
 	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
 	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
+	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
+	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
 	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
@@ -332,6 +381,12 @@ function setupAppearanceSettingsMenu() {
 	});
 	currentTeamToggle?.addEventListener('change', function() {
 		setCurrentTeamVisibility(currentTeamToggle.checked);
+	});
+	disableValueSuggestionsToggle?.addEventListener('change', function() {
+		setAdvancedSearchValueSuggestionsDisabled(disableValueSuggestionsToggle.checked);
+	});
+	availableOnlyToggle?.addEventListener('change', function() {
+		setAvailableOnlyEnabled(availableOnlyToggle.checked);
 	});
 	locationBaseOrderToggle?.addEventListener('change', function() {
 		setLocationBaseOrderEnabled(locationBaseOrderToggle.checked);

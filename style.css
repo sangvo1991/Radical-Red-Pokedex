@@ -582,6 +582,11 @@ li:hover {
 	cursor: pointer;
 }
 
+.appearanceSettingsSubOption {
+	margin-left: 1.45rem;
+	font-size: 0.95rem;
+}
+
 #settingsExportJsonButton {
 	display: block;
 	width: 100%;

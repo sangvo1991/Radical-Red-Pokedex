@@ -247,6 +247,28 @@ function rememberAdvancedSearchQuery(query) {
 	saveAdvancedSearchHistory();
 }
 
+// Returns whether advanced search should keep showing value/history suggestions.
+function shouldShowAdvancedSearchValueSuggestions() {
+	if (typeof areAdvancedSearchValueSuggestionsDisabled === 'function') {
+		return !areAdvancedSearchValueSuggestionsDisabled();
+	}
+
+	return getAppearanceSetting('disableValueSuggestions', false) !== true;
+}
+
+// Builds attribute-level suggestions that remain available even when values are suppressed.
+function buildAdvancedSearchAttributeSuggestions(metadata) {
+	return [
+		{ label: 'not', insertText: 'not', meta: 'name operator', category: 'logical', priority: 0 },
+		...metadata.attributes.map(attribute => ({
+			label: attribute.name,
+			insertText: attribute.name,
+			meta: attribute.kind,
+			category: 'attribute'
+		}))
+	];
+}
+
 // Wires the advanced search input, autocomplete popup, and action button visibility.
 function setupAdvancedSearch() {
 	const input = document.getElementById('advancedSearchInput');
@@ -981,13 +1003,29 @@ function getAdvancedSearchHistorySuggestions() {
 
 // Returns autocomplete suggestions for either history, plain-name mode, or AST mode.
 function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
+	const metadata = buildAdvancedSearchAutocompleteMetadata();
+	const allowValueSuggestions = shouldShowAdvancedSearchValueSuggestions();
+
 	if (!String(input || '').trim()) {
+		if (!allowValueSuggestions) {
+			return filterAdvancedSearchSuggestions(buildAdvancedSearchAttributeSuggestions(metadata), '');
+		}
 		return getAdvancedSearchHistorySuggestions();
 	}
 
 	const plainNameContext = getPlainNameSearchAutocompleteContext(input, cursorIndex);
 	if (plainNameContext) {
-		const metadata = buildAdvancedSearchAutocompleteMetadata();
+		const attributeSuggestions = metadata.attributes.map(attribute => ({
+			label: attribute.name,
+			insertText: attribute.name,
+			meta: attribute.kind,
+			category: 'attribute',
+			priority: 1
+		}));
+		if (!allowValueSuggestions) {
+			return filterAdvancedSearchSuggestions(attributeSuggestions, plainNameContext.fragment);
+		}
+
 		return filterAdvancedSearchSuggestions(
 			[
 				...metadata.byName.name.values.map(name => ({
@@ -997,13 +1035,7 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 					category: 'pokemonNameSearch',
 					priority: 0
 				})),
-				...metadata.attributes.map(attribute => ({
-					label: attribute.name,
-					insertText: attribute.name,
-					meta: attribute.kind,
-					category: 'attribute',
-					priority: 1
-				}))
+				...attributeSuggestions
 			],
 			plainNameContext.fragment
 		);
@@ -1014,19 +1046,10 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 		return [];
 	}
 
-	const metadata = buildAdvancedSearchAutocompleteMetadata();
 	switch (context.state) {
 		case 'expectAttribute':
 			return filterAdvancedSearchSuggestions(
-				[
-					{ label: 'not', insertText: 'not', meta: 'name operator', category: 'logical', priority: 0 },
-					...metadata.attributes.map(attribute => ({
-						label: attribute.name,
-						insertText: attribute.name,
-						meta: attribute.kind,
-						category: 'attribute'
-					}))
-				],
+				buildAdvancedSearchAttributeSuggestions(metadata),
 				context.fragment
 			);
 		case 'expectOperator':
@@ -1062,6 +1085,9 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 			);
 		case 'expectValue':
 		case 'expectValueListItem':
+			if (!allowValueSuggestions) {
+				return [];
+			}
 			return filterAdvancedSearchSuggestions(buildAdvancedSearchValueSuggestions(context.attribute), context.fragment);
 		case 'expectValueListDelimiter':
 			return filterAdvancedSearchSuggestions([
@@ -1186,6 +1212,10 @@ function getFilteredSpeciesResults() {
 	let results = Object.values(species);
 	for (const activeFilter of Object.values(filters).reduce((list, filter) => list.concat(filter.active), [])) {
 		results = results.filter(activeFilter.func);
+	}
+
+	if ((typeof isAvailableOnlyEnabled === 'function' && isAvailableOnlyEnabled()) || getAppearanceSetting('availableOnly', false) === true) {
+		results = results.filter(mon => buildSpeciesSearchRecord(mon).booleans.available === true);
 	}
 
 	if (advancedSearchPredicate) {
