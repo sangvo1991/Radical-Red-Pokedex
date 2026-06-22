@@ -63,13 +63,57 @@ function getFullLearnset(mon) {
   return learnset;
 }
 
-function getSprite(ID) {
-  let sprite = sprites[ID];
-  if (sprite === undefined && species?.[ID]) {
-    sprite = `graphics/species/front/${ID}.png`;
+// Returns the legacy on-disk sprite path for species that are not embedded in data.js yet.
+// This is only used during startup to hydrate missing inline sprite entries.
+function getFallbackSpeciesSpritePath(ID) {
+  if (species?.[ID] && sprites?.[ID] === undefined) {
+    return `graphics/species/front/${ID}.png`;
   }
-  if (sprite === undefined) sprite = sprites[0];
-  return sprite;
+
+  return null;
+}
+
+// Converts a fetched sprite blob into a data URL so the rest of the UI can use a single sprite source format.
+// Keeping sprites inline avoids mixing `data:` URLs and file-path URLs during rendering.
+function convertBlobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Failed to read sprite data.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Hydrates species that still only exist as PNG assets into the shared `sprites` map at startup.
+// Once this finishes, species rendering can read every sprite from `sprites` without falling back to file paths.
+async function inlineMissingSpeciesSprites() {
+  if (!species || !sprites) return;
+
+  const pendingSpeciesIds = Object.values(species)
+    .filter((mon) => mon && sprites[mon.ID] === undefined)
+    .map((mon) => mon.ID);
+
+  await Promise.all(
+    pendingSpeciesIds.map(async (ID) => {
+      const fallbackPath = getFallbackSpeciesSpritePath(ID);
+      if (!fallbackPath) return;
+
+      try {
+        const response = await fetch(fallbackPath);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        sprites[ID] = await convertBlobToDataUrl(await response.blob());
+      } catch (error) {
+        console.warn(`Unable to inline sprite for species ${ID} from ${fallbackPath}.`, error);
+      }
+    })
+  );
+}
+
+function getSprite(ID) {
+  return sprites?.[ID] ?? sprites?.[0];
 }
 
 function loadChunk(tracker, toClear) {

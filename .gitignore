@@ -11,6 +11,7 @@
 
 # Reverse-engineering workspaces, caches, and local tooling state.
 TMP/
+save-hack/
 .ghidra-cache/
 .ghidra-settings/
 .ghidra-local/

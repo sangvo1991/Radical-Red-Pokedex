@@ -33,6 +33,7 @@ async function fetchData() {
 	scaledLevels = data.scaledLevels;
 	caps = data.caps;
 	sprites = data.sprites;
+	await inlineMissingSpeciesSprites();
 
 	if (typeof renderCurrentSavePokemon === "function") {
 		renderCurrentSavePokemon();

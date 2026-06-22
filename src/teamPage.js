@@ -221,6 +221,7 @@ async function fetchTeamPageData() {
 	scaledLevels = data.scaledLevels;
 	caps = data.caps;
 	sprites = data.sprites;
+	await inlineMissingSpeciesSprites();
 
 	buildHardcoreState();
 	setupTeamPageTables();
