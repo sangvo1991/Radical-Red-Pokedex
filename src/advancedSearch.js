@@ -63,6 +63,7 @@ const HARDCORE_SPECIAL_ABILITY_REPLACEMENTS = {
 let hardcoreState = null;
 let advancedSearchPredicate = null;
 let advancedSearchQuery = '';
+let advancedSearchAst = null;
 let speciesSearchCache = new Map();
 let movePackageCache = {
 	base: new Map(),
@@ -1229,12 +1230,13 @@ function getFilteredSpeciesResults() {
 
 // Renders the current result set and refreshes the advanced-search status message.
 function refreshSpeciesResults() {
-	renderSpeciesResults(getFilteredSpeciesResults());
-	updateAdvancedSearchStatus();
+	const results = getFilteredSpeciesResults();
+	renderSpeciesResults(results);
+	updateAdvancedSearchStatus(null, false, results);
 }
 
 // Updates the search status area with either an error or the current match count.
-function updateAdvancedSearchStatus(message = null, isError = false) {
+function updateAdvancedSearchStatus(message = null, isError = false, results = null) {
 	const status = document.getElementById('advancedSearchStatus');
 	if (!status) {
 		return;
@@ -1252,7 +1254,8 @@ function updateAdvancedSearchStatus(message = null, isError = false) {
 		return;
 	}
 
-	status.textContent = `${getFilteredSpeciesResults().length} Pokemon match the advanced search.`;
+	const activeResults = Array.isArray(results) ? results : getFilteredSpeciesResults();
+	status.textContent = `${activeResults.length} Pokemon match the advanced search.`;
 	status.className = 'success';
 }
 
@@ -1273,6 +1276,7 @@ function runAdvancedSearch() {
 		const ast = parseAdvancedSearchWithFallback(query);
 		const predicate = mon => evaluateAdvancedSearch(ast, mon);
 		predicate(Object.values(species)[0]);
+		advancedSearchAst = ast;
 		advancedSearchPredicate = predicate;
 		advancedSearchQuery = query;
 		advancedSearchLastInputValue = input.value;
@@ -1308,9 +1312,23 @@ function normalizeSearchKey(value) {
 	return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
+// Escapes arbitrary text so it can be used as a literal regex fragment.
+function escapeSearchRegex(value) {
+	return String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Deduplicates a list of strings while discarding empty values.
 function uniqStrings(values) {
 	return Array.from(new Set(values.filter(Boolean)));
+}
+
+// Matches a normalized location fragment as a plain substring inside the full location label.
+function locationPhraseIncludes(actualValue, expectedValue) {
+	if (!expectedValue) {
+		return false;
+	}
+
+	return actualValue.includes(expectedValue);
 }
 
 // Builds the species ability package, applying randomizer and Hardcore overrides when needed.
@@ -1927,7 +1945,7 @@ function evaluateAdvancedSearch(ast, mon) {
 
 	const listValue = record.lists[attribute];
 	if (listValue !== undefined) {
-		return evaluateListComparison(listValue, ast.operator, ast.value);
+		return evaluateListComparison(listValue, ast.operator, ast.value, ast.attribute);
 	}
 
 	throw new Error(`Unknown attribute "${ast.attribute}" in advanced search.`);
@@ -2031,10 +2049,13 @@ function evaluateStringComparison(actual, operator, expected, attribute) {
 }
 
 // Evaluates list comparisons, including exact, contains, include-any, and negation modes.
-function evaluateListComparison(actualList, operator, expected) {
+function evaluateListComparison(actualList, operator, expected, attribute = '') {
 	const normalizedActual = actualList.map(normalizeSearchText);
 	const expectedValues = Array.isArray(expected) ? expected : [expected];
 	const normalizedExpected = expectedValues.map(value => normalizeSearchText(value));
+	const matcher = isLocationRenderScopedAttribute(attribute)
+		? locationPhraseIncludes
+		: (actualValue, expectedValue) => actualValue.includes(expectedValue);
 	const everyExpectedMatches = matcher => normalizedExpected.every(expectedValue => normalizedActual.some(actualValue => matcher(actualValue, expectedValue)));
 	const anyExpectedMatches = matcher => normalizedExpected.some(expectedValue => normalizedActual.some(actualValue => matcher(actualValue, expectedValue)));
 
@@ -2043,14 +2064,14 @@ function evaluateListComparison(actualList, operator, expected) {
 		case '==':
 			return everyExpectedMatches((actualValue, expectedValue) => actualValue === expectedValue);
 		case 'has':
-			return everyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
+			return everyExpectedMatches(matcher);
 		case '~':
-			return anyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
+			return anyExpectedMatches(matcher);
 		case '!=':
 		case 'not':
 			return normalizedExpected.every(expectedValue => !normalizedActual.includes(expectedValue));
 		case '!~':
-			return !anyExpectedMatches((actualValue, expectedValue) => actualValue.includes(expectedValue));
+			return !anyExpectedMatches(matcher);
 		default:
 			throw new Error(`Operator "${operator}" is not valid for list comparisons.`);
 	}
@@ -2060,7 +2081,107 @@ function evaluateListComparison(actualList, operator, expected) {
 function clearAdvancedSearchPredicateState() {
 	advancedSearchPredicate = null;
 	advancedSearchQuery = '';
+	advancedSearchAst = null;
 	updateAdvancedSearchStatus();
+}
+
+// Returns true when the attribute should scope grouped rendering by location names.
+function isLocationRenderScopedAttribute(attribute) {
+	return ['location', 'locations', 'locationoriginal', 'locationsoriginal'].includes(normalizeSearchKey(attribute));
+}
+
+// Extracts only location-related comparisons from an advanced-search AST.
+function extractLocationRenderAst(ast) {
+	if (!ast) {
+		return null;
+	}
+
+	if (ast.type === 'logical') {
+		const left = extractLocationRenderAst(ast.left);
+		const right = extractLocationRenderAst(ast.right);
+		if (left && right) {
+			return {
+				type: 'logical',
+				operator: ast.operator,
+				left,
+				right
+			};
+		}
+		return left || right;
+	}
+
+	return isLocationRenderScopedAttribute(ast.attribute) ? ast : null;
+}
+
+// Evaluates one location name against a single location-search comparison node.
+function evaluateLocationRenderComparison(locationName, comparison) {
+	const actualValue = normalizeSearchText(locationName);
+	const expectedValues = (Array.isArray(comparison.value) ? comparison.value : [comparison.value])
+		.filter(value => value !== undefined && value !== null)
+		.map(value => normalizeSearchText(value));
+
+	switch (comparison.operator) {
+		case '=':
+		case '==':
+			return expectedValues.some(expectedValue => actualValue === expectedValue);
+		case '!=':
+		case 'not':
+			return expectedValues.every(expectedValue => actualValue !== expectedValue);
+		case 'has':
+			return expectedValues.every(expectedValue => locationPhraseIncludes(actualValue, expectedValue));
+		case '~':
+			return expectedValues.some(expectedValue => locationPhraseIncludes(actualValue, expectedValue));
+		case '!~':
+			return expectedValues.every(expectedValue => !locationPhraseIncludes(actualValue, expectedValue));
+		default:
+			return false;
+	}
+}
+
+// Recursively applies the extracted location-only AST to a candidate location label.
+function evaluateLocationRenderAst(ast, locationName) {
+	if (!ast) {
+		return true;
+	}
+
+	if (ast.type === 'logical') {
+		if (ast.operator === 'and') {
+			return evaluateLocationRenderAst(ast.left, locationName) && evaluateLocationRenderAst(ast.right, locationName);
+		}
+		return evaluateLocationRenderAst(ast.left, locationName) || evaluateLocationRenderAst(ast.right, locationName);
+	}
+
+	return evaluateLocationRenderComparison(locationName, ast);
+}
+
+// Resolves the active grouped-location scope from either default search or advanced search.
+function getActiveLocationRenderNames() {
+	if (typeof isLocationBaseOrderEnabled === 'function' && !isLocationBaseOrderEnabled()) {
+		return null;
+	}
+
+	const defaultLocationFilter = filters?.Location?.active;
+	if (currentSearchMode !== 'advanced' && Array.isArray(defaultLocationFilter) && defaultLocationFilter.length) {
+		return new Set(defaultLocationFilter.map(active => active.option).filter(Boolean));
+	}
+
+	if (currentSearchMode !== 'advanced' || !advancedSearchAst) {
+		return null;
+	}
+
+	const locationAst = extractLocationRenderAst(advancedSearchAst);
+	if (!locationAst) {
+		return null;
+	}
+
+	const candidateNames = new Set([
+		...getAdvancedSearchLocationNames(),
+		...getAdvancedSearchOriginalLocationNames()
+	]);
+
+	return new Set(
+		Array.from(candidateNames).filter(locationName => evaluateLocationRenderAst(locationAst, locationName))
+	);
 }
 
 // Recursively collects species ids from mixed encounter/location data structures.

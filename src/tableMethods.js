@@ -143,11 +143,14 @@ function renderSpeciesResults(data) {
 	const groupedWrapper = document.getElementById('speciesLocationGroups');
 	const tableWrapper = document.getElementById('speciesTable');
 	const useLocationBaseOrder = typeof isLocationBaseOrderEnabled === 'function' && isLocationBaseOrderEnabled();
+	const matchedLocationNames = useLocationBaseOrder && typeof getActiveLocationRenderNames === 'function'
+		? getActiveLocationRenderNames()
+		: null;
 
 	if (useLocationBaseOrder && typeof renderSpeciesLocationGroups === 'function') {
 		tableWrapper?.classList.add('hide');
 		groupedWrapper?.classList.remove('hide');
-		renderSpeciesLocationGroups(data);
+		renderSpeciesLocationGroups(data, matchedLocationNames);
 		return;
 	}
 

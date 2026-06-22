@@ -471,6 +471,7 @@ function buildWrapperTypeMatchup(type, matchup) {
 let speciesLocationIndexCache = null;
 let randomizedSpeciesLocationCache = new Map();
 let randomizedSpeciesOriginalCache = new Map();
+let speciesLocationGroupCache = new Map();
 const RANDOMIZER_LOCATION_FALLBACK_SPECIES_ID = 132;
 
 function collectSpeciesIdsFromEncounterValue(value, speciesIds) {
@@ -654,6 +655,7 @@ function getDirectSpeciesAreas(ID) {
 function resetDisplayLocationCaches() {
 	randomizedSpeciesLocationCache.clear();
 	randomizedSpeciesOriginalCache.clear();
+	speciesLocationGroupCache.clear();
 }
 
 function getRandomizerSpeciesPoolKey() {
@@ -827,41 +829,63 @@ function collectOrderedSpeciesIdsFromEncounterValue(value, orderedSpeciesIds, se
 	}
 }
 
-function buildSpeciesLocationGroups(results) {
-	const speciesById = new Map(results.map(mon => [mon.ID, mon]));
-	const groupedLocations = new Map();
-	const unmappedSpeciesIds = new Set(speciesById.keys());
-	const useRandomizedLocations = saveData?.random?.normalSpecies === true;
+// Builds the cache key for grouped location rendering from the active save/randomizer state.
+function getSpeciesLocationGroupCacheKey() {
 	const trainedId = saveData?.trainedId;
-	const pool = useRandomizedLocations ? getRandomizerSpeciesPool() : null;
-	const canMapRandomizedSpecies = useRandomizedLocations && typeof trainedId === 'number' && Number.isFinite(trainedId) && !!pool;
+	const poolKey = getRandomizerSpeciesPoolKey();
+	if (saveData?.random?.normalSpecies === true && typeof trainedId === 'number' && Number.isFinite(trainedId) && poolKey) {
+		return `random:${trainedId}:${poolKey}`;
+	}
 
-	const appendSpeciesToLocation = function(locationEntry, speciesId) {
-		const mon = speciesById.get(speciesId);
-		if (!mon) {
-			return;
-		}
+	return 'base';
+}
 
-		const key = locationEntry?.key || `${locationEntry?.areaId ?? -1}:${locationEntry?.name || 'None'}`;
-		if (!groupedLocations.has(key)) {
-			groupedLocations.set(key, {
-				key,
-				areaId: Number.isFinite(Number(locationEntry?.areaId)) ? Number(locationEntry.areaId) : Number.MAX_SAFE_INTEGER,
-				title: locationEntry?.name || 'None',
-				seenSpecies: new Set(),
-				species: []
-			});
-		}
-
-		const group = groupedLocations.get(key);
-		if (group.seenSpecies.has(mon.ID)) {
-			return;
-		}
-
-		group.seenSpecies.add(mon.ID);
-		group.species.push(mon);
-		unmappedSpeciesIds.delete(mon.ID);
+// Creates the lightweight group shell used to cache ordered species ids per location heading.
+function createSpeciesLocationGroupTemplate(locationEntry) {
+	const key = locationEntry?.key || `${locationEntry?.areaId ?? -1}:${locationEntry?.name || 'None'}`;
+	return {
+		key,
+		areaId: Number.isFinite(Number(locationEntry?.areaId)) ? Number(locationEntry.areaId) : Number.MAX_SAFE_INTEGER,
+		title: locationEntry?.name || 'None',
+		speciesIds: [],
+		seenSpecies: new Set()
 	};
+}
+
+// Appends one species id to a cached location group while preserving encounter order and uniqueness.
+function appendSpeciesIdToLocationGroup(groups, locationEntry, speciesId) {
+	if (!species?.[speciesId]) {
+		return;
+	}
+
+	const key = locationEntry?.key || `${locationEntry?.areaId ?? -1}:${locationEntry?.name || 'None'}`;
+	if (!groups.has(key)) {
+		groups.set(key, createSpeciesLocationGroupTemplate(locationEntry));
+	}
+
+	const group = groups.get(key);
+	if (group.seenSpecies.has(speciesId)) {
+		return;
+	}
+
+	group.seenSpecies.add(speciesId);
+	group.speciesIds.push(speciesId);
+}
+
+// Caches the ordered location-group layout so filtered renders only slice visible species from it.
+function getCachedSpeciesLocationGroups() {
+	const cacheKey = getSpeciesLocationGroupCacheKey();
+	if (speciesLocationGroupCache.has(cacheKey)) {
+		return speciesLocationGroupCache.get(cacheKey);
+	}
+
+	const groups = new Map();
+	const trainedId = saveData?.trainedId;
+	const pool = saveData?.random?.normalSpecies === true ? getRandomizerSpeciesPool() : null;
+	const canMapRandomizedSpecies = saveData?.random?.normalSpecies === true && typeof trainedId === 'number' && Number.isFinite(trainedId) && !!pool;
+	const getResolvedLocations = canMapRandomizedSpecies
+		? getRandomizedSpeciesAreas
+		: getDirectSpeciesAreas;
 
 	for (const [areaId, area] of Object.entries(areas || {})) {
 		const areaName = area.name || `Area ${areaId}`;
@@ -870,39 +894,112 @@ function buildSpeciesLocationGroups(results) {
 				continue;
 			}
 
+			const locationEntry = buildSpeciesLocationEntry(areaId, areaName, bucket);
 			const orderedSpeciesIds = [];
 			collectOrderedSpeciesIdsFromEncounterValue(value, orderedSpeciesIds, new Set());
-			const locationEntry = buildSpeciesLocationEntry(areaId, areaName, bucket);
 			for (const originalSpeciesId of orderedSpeciesIds) {
 				const speciesId = canMapRandomizedSpecies
 					? mapSpeciesFromRandomizerPool(originalSpeciesId, trainedId, pool)
 					: originalSpeciesId;
-				appendSpeciesToLocation(locationEntry, speciesId);
+				appendSpeciesIdToLocationGroup(groups, locationEntry, speciesId);
 			}
 		}
 	}
 
-	for (const mon of speciesById.values()) {
-		const resolvedLocations = saveData?.random?.normalSpecies
-			? getRandomizedSpeciesAreas(mon.ID)
-			: getDirectSpeciesAreas(mon.ID);
-		if (!resolvedLocations.length) {
+	for (const mon of Object.values(species || {})) {
+		if (!mon || typeof mon.ID !== 'number') {
 			continue;
 		}
 
-		for (const locationEntry of resolvedLocations) {
-			appendSpeciesToLocation(locationEntry, mon.ID);
+		for (const locationEntry of getResolvedLocations(mon.ID)) {
+			appendSpeciesIdToLocationGroup(groups, locationEntry, mon.ID);
 		}
 	}
 
-	if (unmappedSpeciesIds.size) {
-		const noneEntry = { key: 'none:none', areaId: Number.MAX_SAFE_INTEGER, name: 'None' };
-		for (const speciesId of unmappedSpeciesIds) {
-			appendSpeciesToLocation(noneEntry, speciesId);
+	const sortedGroups = Array.from(groups.values())
+		.sort((left, right) =>
+			left.areaId - right.areaId ||
+			left.title.localeCompare(right.title)
+		)
+		.map(group => ({
+			key: group.key,
+			areaId: group.areaId,
+			title: group.title,
+			speciesIds: group.speciesIds
+		}));
+
+	speciesLocationGroupCache.set(cacheKey, sortedGroups);
+	return sortedGroups;
+}
+
+// Returns normal-search location names in the same in-game order used by grouped location rendering.
+function getDefaultSearchLocationNames() {
+	const orderedNames = [];
+	const seenNames = new Set();
+
+	for (const group of getCachedSpeciesLocationGroups()) {
+		if (!group?.title || seenNames.has(group.title)) {
+			continue;
 		}
+
+		seenNames.add(group.title);
+		orderedNames.push(group.title);
 	}
 
-	return Array.from(groupedLocations.values())
+	if (!seenNames.has('None')) {
+		orderedNames.push('None');
+	}
+
+	return orderedNames;
+}
+
+function buildSpeciesLocationGroups(results, matchedLocationNames = null) {
+	const speciesById = new Map(results.map(mon => [mon.ID, mon]));
+	const unmappedSpeciesIds = new Set(speciesById.keys());
+	const restrictLocations = matchedLocationNames instanceof Set;
+	const allowUnmappedNoneGroup = !restrictLocations || matchedLocationNames.has('None');
+	const groupedLocations = [];
+
+	if (restrictLocations && matchedLocationNames.size === 0) {
+		return [];
+	}
+
+	for (const groupTemplate of getCachedSpeciesLocationGroups()) {
+		if (restrictLocations && !matchedLocationNames.has(groupTemplate.title)) {
+			continue;
+		}
+
+		const visibleSpecies = groupTemplate.speciesIds
+			.map(speciesId => speciesById.get(speciesId))
+			.filter(Boolean);
+		if (!visibleSpecies.length) {
+			continue;
+		}
+
+		for (const mon of visibleSpecies) {
+			unmappedSpeciesIds.delete(mon.ID);
+		}
+
+		groupedLocations.push({
+			key: groupTemplate.key,
+			areaId: groupTemplate.areaId,
+			title: groupTemplate.title,
+			species: visibleSpecies
+		});
+	}
+
+	if (unmappedSpeciesIds.size && allowUnmappedNoneGroup) {
+		groupedLocations.push({
+			key: 'none:none',
+			areaId: Number.MAX_SAFE_INTEGER,
+			title: 'None',
+			species: Array.from(unmappedSpeciesIds)
+				.map(speciesId => speciesById.get(speciesId))
+				.filter(Boolean)
+		});
+	}
+
+	return groupedLocations
 		.filter(group => group.species.length > 0)
 		.sort((left, right) =>
 			left.areaId - right.areaId ||
@@ -910,7 +1007,7 @@ function buildSpeciesLocationGroups(results) {
 		);
 }
 
-function renderSpeciesLocationGroups(results) {
+function renderSpeciesLocationGroups(results, matchedLocationNames = null) {
 	const wrapper = document.getElementById('speciesLocationGroups');
 	if (!wrapper) {
 		return;
@@ -921,7 +1018,7 @@ function renderSpeciesLocationGroups(results) {
 		return;
 	}
 
-	const groups = buildSpeciesLocationGroups(results);
+	const groups = buildSpeciesLocationGroups(results, matchedLocationNames);
 	if (!groups.length) {
 		wrapper.replaceChildren(buildWrapper('div', 'locationSpeciesEmpty', 'None'));
 		return;

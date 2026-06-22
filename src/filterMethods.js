@@ -31,6 +31,12 @@ function setupFilters() {
 			.map(y => getMappedAbility(y, x.ID))	
 			.find(y => y[0] == o.ID)
 	);
+
+	buildFilter('Location', 1,
+		typeof getDefaultSearchLocationNames === 'function' ? getDefaultSearchLocationNames() : [],
+		o => o,
+		(x,o) => buildSpeciesSearchRecord(x).lists.location.includes(o)
+	);
 	
 	//default filter category
 	selectFilterCategory.value = 'Name';
