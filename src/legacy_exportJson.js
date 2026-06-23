@@ -1,3 +1,6 @@
+// Archives the old full-dex JSON export feature without loading it on the live site.
+// This file is intentionally not included by index.html.
+
 // Builds the exported JSON record for one species, including hardcore-adjusted data.
 function buildPokemonExport(mon) {
 	const baseAbilities = getSpeciesAbilityPackage(mon, false);

@@ -56,8 +56,8 @@ const HARDCORE_SPECIAL_ABILITY_REPLACEMENTS = {
 	889: { 'Sand Stream': 'Intimidate' },
 	981: { 'Triage': 'Triage' },
 	1104: { 'Grassy Surge': 'Intimidate' },
-	1264: { 'As One (Moxie + Unnerve)': 'Unnerve' },
-	1265: { 'As One (Grim Neigh + Unnerve)': 'Unnerve' }
+	1264: { 'As One (Moxie)': 'Unnerve' },
+	1265: { 'As One (Grim Neigh)': 'Unnerve' }
 };
 
 let hardcoreState = null;
@@ -1191,11 +1191,11 @@ function getAbilityDisplayNameById(abilityId, nameIndex = 0) {
 	}
 
 	if (abilityId === 73) {
-		return 'As One (Grim Neigh + Unnerve)';
+		return 'As One (Grim Neigh)';
 	}
 
 	if (abilityId === 77) {
-		return 'As One (Moxie + Unnerve)';
+		return 'As One (Moxie)';
 	}
 
 	return abilities[abilityId].names[nameIndex] || abilities[abilityId].names[0];
