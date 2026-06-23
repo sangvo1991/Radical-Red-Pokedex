@@ -8,6 +8,12 @@ body.allowTextSelection *:not(button):not(input):not(label):not(summary) {
 	-webkit-user-select: text !important;
 }
 
+body:not(.allowTextSelection) #appearanceSettingsMenu,
+body:not(.allowTextSelection) #appearanceSettingsMenu * {
+	user-select: none;
+	-webkit-user-select: none;
+}
+
 .hide {
 	display: none;
 }
@@ -749,6 +755,16 @@ li:hover {
 	color: white;
 	color: rgba(255, 255, 255, 0.5);
 	gap: 0px 0.4rem;
+}
+
+#currentSaveProgression {
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 0.95rem;
+	text-align: center;
+}
+
+#currentSaveProgression.hide {
+	display: none;
 }
 
 #currentSave.hide, #saveFileInputButton.hide {

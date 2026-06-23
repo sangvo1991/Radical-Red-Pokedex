@@ -23,6 +23,7 @@ let trackers = {};
 let filters = {};
 let appearanceSettings = {
 	currentTeamVisible: true,
+	gameProgressionVisible: false,
 	locationBaseOrder: false,
 	allowTextSelection: false,
 	hardcoreChangesVisible: true,

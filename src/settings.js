@@ -37,6 +37,7 @@ function loadAppearanceSettings() {
 	const storedSettings = readAppearanceSettingsFromStorage();
 	appearanceSettings = {
 		currentTeamVisible: storedSettings.currentTeamVisible !== false,
+		gameProgressionVisible: storedSettings.gameProgressionVisible === true,
 		locationBaseOrder: storedSettings.locationBaseOrder === true,
 		allowTextSelection: storedSettings.allowTextSelection === true,
 		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false,
@@ -59,6 +60,11 @@ function isLocationBaseOrderEnabled() {
 // Returns whether the current team panel should be shown.
 function isCurrentTeamVisibleEnabled() {
 	return appearanceSettings.currentTeamVisible !== false;
+}
+
+// Returns whether the short save progression summary should be shown below the current save line.
+function isGameProgressionVisibleEnabled() {
+	return appearanceSettings.gameProgressionVisible === true;
 }
 
 // Returns whether copy/select protection is disabled for the page.
@@ -89,6 +95,18 @@ function setCurrentTeamVisibility(enabled, persist = true) {
 	}
 	if (typeof renderCurrentSavePokemon === 'function') {
 		renderCurrentSavePokemon();
+	}
+	updateAppearanceSettingsControls();
+}
+
+// Toggles the short save progression line and refreshes it immediately when a save is loaded.
+function setGameProgressionVisible(enabled, persist = true) {
+	appearanceSettings.gameProgressionVisible = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	if (typeof renderCurrentSaveProgression === 'function') {
+		renderCurrentSaveProgression();
 	}
 	updateAppearanceSettingsControls();
 }
@@ -150,6 +168,9 @@ function setAvailableOnlyEnabled(enabled, persist = true) {
 // Applies all persisted appearance settings to the live page state.
 function applyAppearanceSettings() {
 	applyTextSelectionSetting();
+	if (typeof renderCurrentSaveProgression === 'function') {
+		renderCurrentSaveProgression();
+	}
 	if (typeof renderCurrentSavePokemon === 'function') {
 		renderCurrentSavePokemon();
 	}
@@ -167,6 +188,7 @@ function updateAppearanceSettingsControls() {
 	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
 	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
+	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
 	const disableValueSuggestionsOption = document.getElementById('appearanceDisableValueSuggestionsOption');
 	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
@@ -182,6 +204,9 @@ function updateAppearanceSettingsControls() {
 	}
 	if (currentTeamToggle) {
 		currentTeamToggle.checked = isCurrentTeamVisibleEnabled();
+	}
+	if (gameProgressionToggle) {
+		gameProgressionToggle.checked = isGameProgressionVisibleEnabled();
 	}
 	if (disableValueSuggestionsOption) {
 		disableValueSuggestionsOption.classList.toggle('hide', currentSearchMode !== 'advanced');
@@ -283,6 +308,7 @@ function setupAppearanceSettingsMenu() {
 	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
 	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
+	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
 	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
@@ -398,6 +424,9 @@ function setupAppearanceSettingsMenu() {
 	});
 	currentTeamToggle?.addEventListener('change', function() {
 		setCurrentTeamVisibility(currentTeamToggle.checked);
+	});
+	gameProgressionToggle?.addEventListener('change', function() {
+		setGameProgressionVisible(gameProgressionToggle.checked);
 	});
 	disableValueSuggestionsToggle?.addEventListener('change', function() {
 		setAdvancedSearchValueSuggestionsDisabled(disableValueSuggestionsToggle.checked);

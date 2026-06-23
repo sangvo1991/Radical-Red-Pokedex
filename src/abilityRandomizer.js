@@ -675,6 +675,24 @@ function renderCurrentSavePokemon() {
     wrapper.classList.remove("hide");
 }
 
+// Shows one short progression label between the current-save line and the search controls.
+function renderCurrentSaveProgression() {
+    const progression = document.getElementById("currentSaveProgression");
+    if (!progression) {
+        return;
+    }
+
+    if (!saveData || typeof getAppearanceSetting !== "function" || !getAppearanceSetting("gameProgressionVisible", false)) {
+        progression.classList.add("hide");
+        progression.textContent = "";
+        return;
+    }
+
+    const summary = saveData.progression?.summary || "Unknown";
+    progression.textContent = `Game Progression: ${summary}`;
+    progression.classList.remove("hide");
+}
+
 function readDataFromSaveFile(file) {
     const logicalSave = buildLogicalSaveData(file);
     if (!logicalSave) {
@@ -695,6 +713,9 @@ function readDataFromSaveFile(file) {
     const learnset = (randomBitFlag & 0x2) > 0;
     const abilities = (randomBitFlag & 0x4) > 0;
     const speciesRandomizerState = inferSpeciesRandomizerBranchFromFlags(readSpeciesRandomizerEventFlags(logicalSave));
+    const progression = typeof saveProgression?.readStoryFlagsFromLogicalSave === "function"
+        ? saveProgression.readStoryFlagsFromLogicalSave(logicalSave)
+        : {summary: "Unknown"};
 
     const gameSpecificData = GAME_SPECIFIC_LOGICAL_OFFSET;
     const hardmodeBitflag = logicalSave.getUint8(gameSpecificData + HARDMODE_BITFLAG);
@@ -720,6 +741,7 @@ function readDataFromSaveFile(file) {
             trainedId,
             restricted,
             hardmode,
+            progression,
             party,
             boxes: readBoxPokemonFromSave(logicalSave),
             random: {
@@ -800,6 +822,7 @@ function processSaveData(data) {
         document.getElementById("currentSave")?.classList.add("hide");
         document.getElementById("saveFileInputButton")?.classList.remove("hide");
     }
+    renderCurrentSaveProgression();
     renderCurrentSavePokemon();
     if (typeof onSaveDataProcessed === "function") {
         onSaveDataProcessed(saveData);

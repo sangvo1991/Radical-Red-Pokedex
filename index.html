@@ -47,6 +47,10 @@
 						<span>Current Team</span>
 					</label>
 					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceGameProgressionToggle">
+						<span>Game Progression</span>
+					</label>
+					<label class="appearanceSettingsOption">
 						<input type="checkbox" id="appearanceLocationBaseOrderToggle">
 						<span>Location Base Order</span>
 					</label>
@@ -196,6 +200,7 @@
 							Clear
 						</button>
 					</div>
+					<div id="currentSaveProgression" class="hide"></div>
 					<div id="currentSavePokemon" class="hide">
 						<details id="currentSaveTeamDetails" open>
 							<summary>Team (<span id="currentSaveTeamCount">0</span>)</summary>
@@ -247,6 +252,7 @@
 		</main>
 		<!-- Optional JavaScript -->
 		<script src="src/globals.js"></script>
+		<script src="src/saveProgression.js"></script>
 		<script src="src/randomizerMetadata.js"></script>
 		<script src="src/locationMetadata.js"></script>
 		<script src="src/tableMethods.js"></script>
