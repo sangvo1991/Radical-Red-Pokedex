@@ -27,6 +27,7 @@ let appearanceSettings = {
 	locationBaseOrder: false,
 	allowTextSelection: false,
 	hardcoreChangesVisible: true,
+	pokemonOffensiveVisible: true,
 	disableValueSuggestions: false,
 	availableOnly: false
 };

@@ -41,6 +41,7 @@ function loadAppearanceSettings() {
 		locationBaseOrder: storedSettings.locationBaseOrder === true,
 		allowTextSelection: storedSettings.allowTextSelection === true,
 		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false,
+		pokemonOffensiveVisible: storedSettings.pokemonOffensiveVisible !== false,
 		disableValueSuggestions: storedSettings.disableValueSuggestions === true,
 		availableOnly: storedSettings.availableOnly === true
 	};
@@ -75,6 +76,11 @@ function isTextSelectionEnabled() {
 // Returns whether the modal should show Hardcore-specific ability and original-species details.
 function isHardcoreChangesVisibleEnabled() {
 	return appearanceSettings.hardcoreChangesVisible !== false;
+}
+
+// Returns whether the species modal should show the offensive type-coverage row.
+function isPokemonOffensiveVisibleEnabled() {
+	return appearanceSettings.pokemonOffensiveVisible !== false;
 }
 
 // Returns whether advanced search should suppress value/history suggestions.
@@ -143,6 +149,18 @@ function setHardcoreChangesVisible(enabled, persist = true) {
 	}
 }
 
+// Toggles the offensive type-coverage block in the open Pokemon modal and future modal renders.
+function setPokemonOffensiveVisible(enabled, persist = true) {
+	appearanceSettings.pokemonOffensiveVisible = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	updateAppearanceSettingsControls();
+	if (typeof rerenderCurrentSpeciesPanel === 'function') {
+		rerenderCurrentSpeciesPanel();
+	}
+}
+
 // Toggles value suggestions inside advanced search without affecting attribute/operator hints.
 function setAdvancedSearchValueSuggestionsDisabled(enabled, persist = true) {
 	appearanceSettings.disableValueSuggestions = enabled === true;
@@ -195,6 +213,7 @@ function updateAppearanceSettingsControls() {
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
 	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
+	const pokemonOffensiveToggle = document.getElementById('appearancePokemonOffensiveToggle');
 
 	if (defaultRadio) {
 		defaultRadio.checked = currentSearchMode !== 'advanced';
@@ -226,6 +245,9 @@ function updateAppearanceSettingsControls() {
 	}
 	if (hardcoreChangesToggle) {
 		hardcoreChangesToggle.checked = isHardcoreChangesVisibleEnabled();
+	}
+	if (pokemonOffensiveToggle) {
+		pokemonOffensiveToggle.checked = isPokemonOffensiveVisibleEnabled();
 	}
 }
 
@@ -314,6 +336,7 @@ function setupAppearanceSettingsMenu() {
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
 	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
+	const pokemonOffensiveToggle = document.getElementById('appearancePokemonOffensiveToggle');
 	if (!wrapper || !button || !menu) {
 		return;
 	}
@@ -442,6 +465,9 @@ function setupAppearanceSettingsMenu() {
 	});
 	hardcoreChangesToggle?.addEventListener('change', function() {
 		setHardcoreChangesVisible(hardcoreChangesToggle.checked);
+	});
+	pokemonOffensiveToggle?.addEventListener('change', function() {
+		setPokemonOffensiveVisible(pokemonOffensiveToggle.checked);
 	});
 }
 

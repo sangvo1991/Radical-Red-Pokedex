@@ -103,6 +103,7 @@ function displaySpeciesPanel(mon, saveEntry = null) {
 		buildWrapperChangelog('div', 'infoChangelog', mon),
 		buildWrapperFamilyTree('div', 'infoFamilyTree', mon),
 		buildWrapperCoverageDefensive('div', 'infoCoverage', mon.type[0], mon.type[1]),
+		buildWrapperCoverageOffensive('div', 'infoCoverage', mon.type[0], mon.type[1]),
 		buildWrapperHardcoreSummary('div', 'infoHardcore', mon),
 		buildWrapperHeldItems('div', 'infoItems', mon.items),
 		buildWrapperOriginalSpeciesDetail('div', 'infoOriginalSpecies', mon),
@@ -435,27 +436,61 @@ function buildWrapperCoverageDefensive(tag, className, primary, secondary=undefi
 	let label = buildWrapper('div', 'coverageLabelWrapper', 'Weakness');
 	let matchups = buildWrapper('div', 'coverageMatchupsWrapper');
 	
-	let coverage = {};
 	for (const type of Object.values(types)) {
-
 		let matchup = 1;
 		for (const speciesType of [primary, secondary]) {
-
 			if (speciesType === undefined)
 				continue;
 			
-			switch (type.matchup[speciesType]) {
-				case 20: matchup *= 2;   break;
-				case  5: matchup *= 0.5; break;
-				case  1: matchup *= 0;   break;
-			}
+			matchup *= getTypeMatchupMultiplier(type.ID, speciesType);
 		}
+
+		if (matchup === 1)
+			continue;
 		
 		matchups.append(buildWrapperTypeMatchup(type, matchup));
 	}
 	
 	wrapper.append(label, matchups);
 	
+	return wrapper;
+}
+
+// Converts one attacking-type-vs-defending-type chart entry into the multiplier shown in the UI.
+function getTypeMatchupMultiplier(attackingType, defendingType) {
+	switch (types[attackingType].matchup[defendingType]) {
+		case 20: return 2;
+		case  5: return 0.5;
+		case  1: return 0;
+		default: return 1;
+	}
+}
+
+// Builds the offensive type-coverage row by showing the best STAB hit against each defending type.
+function buildWrapperCoverageOffensive(tag, className, primary, secondary=undefined) {
+	let wrapper = buildWrapper(tag, className + 'Wrapper');
+	if (getAppearanceSetting('pokemonOffensiveVisible', true) === false) {
+		return wrapper;
+	}
+
+	let label = buildWrapper('div', 'coverageLabelWrapper', 'Offensive');
+	let matchups = buildWrapper('div', 'coverageMatchupsWrapper');
+
+	for (const type of Object.values(types)) {
+		let matchup = getTypeMatchupMultiplier(primary, type.ID);
+
+		if (secondary !== undefined) {
+			matchup = Math.max(matchup, getTypeMatchupMultiplier(secondary, type.ID));
+		}
+
+		if (matchup === 1)
+			continue;
+
+		matchups.append(buildWrapperTypeMatchup(type, matchup));
+	}
+
+	wrapper.append(label, matchups);
+
 	return wrapper;
 }
 
