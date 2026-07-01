@@ -23,21 +23,10 @@
 			<div id="appearanceSettingsWrapper">
 				<button id="appearanceSettingsButton" type="button" aria-expanded="false">Settings</button>
 				<div id="appearanceSettingsMenu" class="hide" tabindex="-1">
-					<div class="appearanceSettingsGroup">
-						<div class="appearanceSettingsGroupLabel">Default Search</div>
-						<label class="appearanceSettingsOption">
-							<input type="radio" name="defaultSearchMode" id="appearanceSearchModeDefault" value="default">
-							<span>Normal Search</span>
-						</label>
-						<label class="appearanceSettingsOption">
-							<input type="radio" name="defaultSearchMode" id="appearanceSearchModeAdvanced" value="advanced">
-							<span>Advanced Search</span>
-						</label>
-						<label id="appearanceDisableValueSuggestionsOption" class="appearanceSettingsOption appearanceSettingsSubOption hide">
-							<input type="checkbox" id="appearanceDisableValueSuggestionsToggle">
-							<span>Disable Value(PKM) suggestion</span>
-						</label>
-					</div>
+					<label id="appearanceAdvancedSearchSuggestionsOption" class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceAdvancedSearchSuggestionsToggle">
+						<span>Enable Adv.Search Suggestion</span>
+					</label>
 					<label class="appearanceSettingsOption">
 						<input type="checkbox" id="appearanceAvailableOnlyToggle">
 						<span>Available Pokemons Only</span>
@@ -65,6 +54,10 @@
 					<label class="appearanceSettingsOption">
 						<input type="checkbox" id="appearancePokemonOffensiveToggle">
 						<span>Show Pokemon Offensive</span>
+					</label>
+					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearancePatchedAbilityToggle">
+						<span>[Experimental] Patched Ability</span>
 					</label>
 				</div>
 			</div>
@@ -233,17 +226,10 @@
 				</div>
 			</div>
 			<div id="advancedSearchControl" class="hide">
-				<label for="advancedSearchInput">Advanced Search</label>
-				<div id="advancedSearchForm">
-					<div id="advancedSearchInputWrapper">
-						<input type="text" autocomplete="off" id="advancedSearchInput" placeholder="Example: (bst >= 600 and location has 'route 3')">
-						<ul id="advancedSearchAutocompleteDropdown" class="hide"></ul>
-					</div>
-					<div id="advancedSearchActions" class="hide">
-						<button id="advancedSearchButton" type="button" onclick="runAdvancedSearch()">Search</button>
-						<button id="advancedSearchClearButton" type="button" onclick="clearAdvancedSearch()">Clear</button>
-						<button id="advancedSearchGuideButton" type="button" onclick="showAdvancedSearchGuide()">Guide</button>
-					</div>
+				<div id="advancedSearchActions">
+					<button id="advancedSearchButton" type="button" onclick="runAdvancedSearch()">Search</button>
+					<button id="advancedSearchClearButton" type="button" onclick="clearAdvancedSearch()">Clear</button>
+					<button id="advancedSearchGuideButton" type="button" onclick="showAdvancedSearchGuide()">Guide</button>
 				</div>
 				<div id="advancedSearchStatus"></div>
 			</div>

@@ -100,68 +100,34 @@ li:hover {
 }
 
 #advancedSearchControl {
-	width: min(50vw, 560px);
-	min-width: 320px;
 	color: white;
 	margin: 0 auto;
 	padding: 0 30px 15px 30px;
-}
-
-#searchModeControl {
 	display: flex;
-	justify-content: center;
-}
-
-#advancedSearchControl label {
-	display: block;
-	margin-bottom: 4px;
-	text-align: center;
-	font-weight: 550;
-}
-
-#advancedSearchForm {
-	display: flex;
-	flex-wrap: wrap;
+	flex-direction: column;
+	align-items: center;
 	gap: 8px;
-	justify-content: center;
 }
 
 #advancedSearchActions {
-	width: 100%;
 	display: flex;
 	flex-wrap: nowrap;
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	opacity: 0;
-	transform: translateY(-10px);
-	transition: opacity 0.1s ease, transform 0.1s ease;
+	opacity: 1;
+	transform: none;
+	transition: none;
 }
 
 #advancedSearchActions.visible {
 	opacity: 1;
-	transform: translateY(0);
+	transform: none;
 }
 
 #advancedSearchActions > button {
 	display: inline-block;
 	flex: 0 0 auto;
-}
-
-#advancedSearchInputWrapper {
-	flex: 1 1 100%;
-	min-width: 0;
-}
-
-#advancedSearchInput {
-	width: 100%;
-}
-
-#advancedSearchAutocompleteDropdown {
-	top: auto;
-	bottom: calc(100% + 2px);
-	max-height: 108px;
-	overflow-y: auto;
 }
 
 .advancedSearchAutocompleteItem {
@@ -691,8 +657,15 @@ li:hover {
     left: -1px;
 }
 
-#advancedSearchInput {
-	width: 100%;
+#speciesControl.advancedSearchMode #speciesFilterInput {
+	width: clamp(180px, 48vw, 560px);
+}
+
+#speciesControl.advancedSearchMode #speciesFilterInputDropdown {
+	top: auto;
+	bottom: calc(100% + 2px);
+	max-height: 108px;
+	overflow-y: auto;
 }
 
 #advancedSearchButton, #advancedSearchClearButton, #advancedSearchGuideButton {
@@ -705,9 +678,8 @@ li:hover {
 }
 
 @media only screen and (max-width: 767px) {
-	#advancedSearchControl {
-		width: calc(100% - 30px);
-		min-width: 0;
+	#speciesControl.advancedSearchMode #speciesFilterInput {
+		width: clamp(150px, 52vw, 420px);
 	}
 }
 

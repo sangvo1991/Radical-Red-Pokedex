@@ -296,12 +296,40 @@ function tryRandomizeAbility(trainedId, restricted, ability, species) {
     return abilitiesTable[newAbilityIdx];
 }
 
+// Mirrors the optional collision-free ROM patch without affecting tools that still depend on vanilla RR logic.
+function tryRandomizeAbilityPatched(trainedId, restricted, ability, species) {
+    if (ability === 0) {
+        return 0;
+    }
+    trainedId = Math.max(1, trainedId);
+    const abilitiesTable = restricted ? ABILITIES_RESTRICTED : ABILITIES_NORMAL;
+    const abilitiesCount = abilitiesTable.length;
+    const secretIdLowerByte = ((trainedId >> 0x10) & 0xFFFF) % 0xFF;
+    let newAbilityIdx = (trainedId & 0xffff) % abilitiesCount;
+    const extraMix = (((species << 1) & 0xFFFF) ^ ability) & 0xFFFF;
+    newAbilityIdx = (newAbilityIdx + species + ability + extraMix) & 0xFFFF;
+    if (newAbilityIdx > abilitiesCount) {
+        newAbilityIdx = (newAbilityIdx - abilitiesCount + 2) & 0xFFFF;
+    }
+    newAbilityIdx = (newAbilityIdx ^ secretIdLowerByte & 0xFFFF) % abilitiesCount;
+    return abilitiesTable[newAbilityIdx];
+}
+
+// Reads the appearance setting safely on pages that load the mapper without the full settings UI.
+function shouldUsePatchedAbilityRandomizer() {
+    return typeof getAppearanceSetting === 'function'
+        && getAppearanceSetting('patchedAbilityExperimental', false) === true;
+}
+
 function getMappedAbility(ability, species) {
     if (!saveData || !saveData.random.abilities) {
         return ability;
     }
 
-    const randomizedAbility = tryRandomizeAbility(saveData.trainedId, saveData.restricted, ability[0], species);
+    const abilityMapper = shouldUsePatchedAbilityRandomizer()
+        ? tryRandomizeAbilityPatched
+        : tryRandomizeAbility;
+    const randomizedAbility = abilityMapper(saveData.trainedId, saveData.restricted, ability[0], species);
     return [randomizedAbility, 0];
 }
 

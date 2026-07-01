@@ -1,10 +1,7 @@
-let currentSearchMode = 'default';
 let appearanceSettingsHideTimer = null;
 let appearanceSettingsVisibilityTimer = null;
 let advancedSearchShortcutsHideTimer = null;
 let advancedSearchShortcutsVisibilityTimer = null;
-
-const ADVANCED_SEARCH_MODE_STORAGE_KEY = 'advancedSearchMode';
 const ADVANCED_SEARCH_SHORTCUTS = [
 	{
 		title: 'Sweeper',
@@ -29,12 +26,16 @@ function setupAdvancedFeatures() {
 	setupAdvancedSearchShortcutsMenu();
 	setupAppearanceSettingsMenu();
 	applyAppearanceSettings();
-	setSearchMode(getStoredSearchMode(), false);
+	updateIntegratedSearchControls();
 }
 
 // Loads persisted appearance preferences into the shared runtime settings object.
 function loadAppearanceSettings() {
 	const storedSettings = readAppearanceSettingsFromStorage();
+	const advancedSearchSuggestionsEnabled =
+		Object.prototype.hasOwnProperty.call(storedSettings, 'advancedSearchSuggestionsEnabled')
+			? storedSettings.advancedSearchSuggestionsEnabled !== false
+			: storedSettings.disableValueSuggestions !== true;
 	appearanceSettings = {
 		currentTeamVisible: storedSettings.currentTeamVisible !== false,
 		gameProgressionVisible: storedSettings.gameProgressionVisible === true,
@@ -42,7 +43,8 @@ function loadAppearanceSettings() {
 		allowTextSelection: storedSettings.allowTextSelection === true,
 		hardcoreChangesVisible: storedSettings.hardcoreChangesVisible !== false,
 		pokemonOffensiveVisible: storedSettings.pokemonOffensiveVisible !== false,
-		disableValueSuggestions: storedSettings.disableValueSuggestions === true,
+		patchedAbilityExperimental: storedSettings.patchedAbilityExperimental === true,
+		advancedSearchSuggestionsEnabled,
 		availableOnly: storedSettings.availableOnly === true
 	};
 	appearanceSettingsLoaded = true;
@@ -83,9 +85,14 @@ function isPokemonOffensiveVisibleEnabled() {
 	return appearanceSettings.pokemonOffensiveVisible !== false;
 }
 
-// Returns whether advanced search should suppress value/history suggestions.
-function areAdvancedSearchValueSuggestionsDisabled() {
-	return appearanceSettings.disableValueSuggestions === true;
+// Returns whether random abilities should use the patched collision-free mapper.
+function isPatchedAbilityExperimentalEnabled() {
+	return appearanceSettings.patchedAbilityExperimental === true;
+}
+
+// Returns whether advanced search autocomplete should run at all.
+function areAdvancedSearchSuggestionsEnabled() {
+	return appearanceSettings.advancedSearchSuggestionsEnabled !== false;
 }
 
 // Returns whether species lists should always be filtered to obtainable Pokemon.
@@ -161,14 +168,36 @@ function setPokemonOffensiveVisible(enabled, persist = true) {
 	}
 }
 
-// Toggles value suggestions inside advanced search without affecting attribute/operator hints.
-function setAdvancedSearchValueSuggestionsDisabled(enabled, persist = true) {
-	appearanceSettings.disableValueSuggestions = enabled === true;
+// Rebuilds cached ability/search data after toggling the experimental patched mapper.
+function setPatchedAbilityExperimentalEnabled(enabled, persist = true) {
+	appearanceSettings.patchedAbilityExperimental = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	if (typeof resetAdvancedFeatureCaches === 'function') {
+		resetAdvancedFeatureCaches();
+	}
+	updateAppearanceSettingsControls();
+	if (typeof refreshSpeciesResults === 'function') {
+		refreshSpeciesResults();
+	}
+	if (typeof rerenderCurrentSpeciesPanel === 'function') {
+		rerenderCurrentSpeciesPanel();
+	}
+}
+
+// Enables or disables the advanced-search autocomplete pipeline entirely.
+function setAdvancedSearchSuggestionsEnabled(enabled, persist = true) {
+	appearanceSettings.advancedSearchSuggestionsEnabled = enabled === true;
 	if (persist) {
 		persistAppearanceSettings();
 	}
 	updateAppearanceSettingsControls();
-	if (currentSearchMode === 'advanced' && typeof refreshAdvancedSearchAutocomplete === 'function') {
+	if (!enabled && typeof clearAdvancedSearchAutocompleteRuntime === 'function') {
+		clearAdvancedSearchAutocompleteRuntime(true);
+		return;
+	}
+	if (enabled && typeof refreshAdvancedSearchAutocomplete === 'function') {
 		refreshAdvancedSearchAutocomplete();
 	}
 }
@@ -193,6 +222,7 @@ function applyAppearanceSettings() {
 		renderCurrentSavePokemon();
 	}
 	updateAppearanceSettingsControls();
+	updateIntegratedSearchControls();
 	refreshSpeciesResults();
 }
 
@@ -203,36 +233,32 @@ function applyTextSelectionSetting() {
 
 // Syncs the settings popup controls with the current runtime state.
 function updateAppearanceSettingsControls() {
-	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
-	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
 	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
-	const disableValueSuggestionsOption = document.getElementById('appearanceDisableValueSuggestionsOption');
-	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
+	const advancedSearchSuggestionsOption = document.getElementById('appearanceAdvancedSearchSuggestionsOption');
+	const advancedSearchSuggestionsToggle = document.getElementById('appearanceAdvancedSearchSuggestionsToggle');
+	const patchedAbilityToggle = document.getElementById('appearancePatchedAbilityToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
 	const hardcoreChangesToggle = document.getElementById('appearanceHardcoreChangesToggle');
 	const pokemonOffensiveToggle = document.getElementById('appearancePokemonOffensiveToggle');
 
-	if (defaultRadio) {
-		defaultRadio.checked = currentSearchMode !== 'advanced';
-	}
-	if (advancedRadio) {
-		advancedRadio.checked = currentSearchMode === 'advanced';
-	}
 	if (currentTeamToggle) {
 		currentTeamToggle.checked = isCurrentTeamVisibleEnabled();
 	}
 	if (gameProgressionToggle) {
 		gameProgressionToggle.checked = isGameProgressionVisibleEnabled();
 	}
-	if (disableValueSuggestionsOption) {
-		disableValueSuggestionsOption.classList.toggle('hide', currentSearchMode !== 'advanced');
+	if (advancedSearchSuggestionsOption) {
+		advancedSearchSuggestionsOption.classList.remove('hide');
 	}
-	if (disableValueSuggestionsToggle) {
-		disableValueSuggestionsToggle.checked = areAdvancedSearchValueSuggestionsDisabled();
-		disableValueSuggestionsToggle.disabled = currentSearchMode !== 'advanced';
+	if (advancedSearchSuggestionsToggle) {
+		advancedSearchSuggestionsToggle.checked = areAdvancedSearchSuggestionsEnabled();
+		advancedSearchSuggestionsToggle.disabled = false;
+	}
+	if (patchedAbilityToggle) {
+		patchedAbilityToggle.checked = isPatchedAbilityExperimentalEnabled();
 	}
 	if (availableOnlyToggle) {
 		availableOnlyToggle.checked = isAvailableOnlyEnabled();
@@ -251,87 +277,15 @@ function updateAppearanceSettingsControls() {
 	}
 }
 
-// Reads the preferred default search mode from localStorage.
-function getStoredSearchMode() {
-	try {
-		const storedMode = localStorage.getItem(ADVANCED_SEARCH_MODE_STORAGE_KEY);
-		return storedMode === 'advanced' ? 'advanced' : 'default';
-	}
-	catch {
-		return 'default';
-	}
-}
-
-// Persists the selected default search mode for future visits.
-function saveSearchMode(mode) {
-	try {
-		localStorage.setItem(
-			ADVANCED_SEARCH_MODE_STORAGE_KEY,
-			mode === 'advanced' ? 'advanced' : 'default'
-		);
-	}
-	catch {}
-}
-
-// Keeps the legacy toggle button label in sync when that button exists.
-function updateSearchModeToggleButton() {
-	const toggleButton = document.getElementById('searchModeToggleButton');
-	if (!toggleButton) {
-		updateAppearanceSettingsControls();
-		return;
-	}
-
-	toggleButton.textContent = currentSearchMode === 'advanced'
-		? 'Switch to Default Search'
-		: 'Switch to Advanced Search';
-}
-
-// Switches between normal and advanced search UIs and resets conflicting state.
-function setSearchMode(mode, persist = true) {
-	currentSearchMode = mode === 'advanced' ? 'advanced' : 'default';
-
-	const speciesControl = document.getElementById('speciesControl');
-	const activeFilters = document.getElementById('activeFilters');
-	const advancedSearchControl = document.getElementById('advancedSearchControl');
-	const advancedSearchInput = document.getElementById('advancedSearchInput');
-
-	speciesControl?.classList.toggle('hide', currentSearchMode === 'advanced');
-	activeFilters?.classList.toggle('hide', currentSearchMode === 'advanced');
-	advancedSearchControl?.classList.toggle('hide', currentSearchMode !== 'advanced');
-	updateSearchModeToggleButton();
-	updateAppearanceSettingsControls();
-
-	if (persist) {
-		saveSearchMode(currentSearchMode);
-	}
-
-	if (currentSearchMode === 'advanced') {
-		removeFilters();
-		if (advancedSearchInput) {
-			advancedSearchLastInputValue = advancedSearchInput.value;
-			if (document.activeElement === advancedSearchInput) {
-				refreshAdvancedSearchAutocomplete();
-			} else {
-				hideAdvancedSearchAutocomplete();
-			}
-		}
-		return;
-	}
-
-	clearAdvancedSearch();
-	hideAdvancedSearchAutocomplete();
-}
-
 // Wires the settings popup behavior, fade timing, and control event handlers.
 function setupAppearanceSettingsMenu() {
 	const wrapper = document.getElementById('appearanceSettingsWrapper');
 	const button = document.getElementById('appearanceSettingsButton');
 	const menu = document.getElementById('appearanceSettingsMenu');
-	const defaultRadio = document.getElementById('appearanceSearchModeDefault');
-	const advancedRadio = document.getElementById('appearanceSearchModeAdvanced');
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
 	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
-	const disableValueSuggestionsToggle = document.getElementById('appearanceDisableValueSuggestionsToggle');
+	const advancedSearchSuggestionsToggle = document.getElementById('appearanceAdvancedSearchSuggestionsToggle');
+	const patchedAbilityToggle = document.getElementById('appearancePatchedAbilityToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
@@ -435,24 +389,17 @@ function setupAppearanceSettingsMenu() {
 		}
 	});
 
-	defaultRadio?.addEventListener('change', function() {
-		if (defaultRadio.checked) {
-			setSearchMode('default');
-		}
-	});
-	advancedRadio?.addEventListener('change', function() {
-		if (advancedRadio.checked) {
-			setSearchMode('advanced');
-		}
-	});
 	currentTeamToggle?.addEventListener('change', function() {
 		setCurrentTeamVisibility(currentTeamToggle.checked);
 	});
 	gameProgressionToggle?.addEventListener('change', function() {
 		setGameProgressionVisible(gameProgressionToggle.checked);
 	});
-	disableValueSuggestionsToggle?.addEventListener('change', function() {
-		setAdvancedSearchValueSuggestionsDisabled(disableValueSuggestionsToggle.checked);
+	advancedSearchSuggestionsToggle?.addEventListener('change', function() {
+		setAdvancedSearchSuggestionsEnabled(advancedSearchSuggestionsToggle.checked);
+	});
+	patchedAbilityToggle?.addEventListener('change', function() {
+		setPatchedAbilityExperimentalEnabled(patchedAbilityToggle.checked);
 	});
 	availableOnlyToggle?.addEventListener('change', function() {
 		setAvailableOnlyEnabled(availableOnlyToggle.checked);
@@ -471,19 +418,44 @@ function setupAppearanceSettingsMenu() {
 	});
 }
 
-// Flips the search mode using the current in-memory selection.
-function toggleSearchMode() {
-	setSearchMode(currentSearchMode === 'advanced' ? 'default' : 'advanced');
+// Keeps the integrated search row synced with the currently selected category and active query.
+function updateIntegratedSearchControls() {
+	const speciesControl = document.getElementById('speciesControl');
+	const speciesFilterCategory = document.getElementById('speciesFilterCategory');
+	const speciesFilterInput = document.getElementById('speciesFilterInput');
+	const speciesInputWrapper = document.getElementById('speciesFilterInputWrapper');
+	const speciesFilterSeparator = document.getElementById('speciesFilterSeparator');
+	const advancedSearchControl = document.getElementById('advancedSearchControl');
+	const advancedSearchActions = document.getElementById('advancedSearchActions');
+	const advancedSearchSelected = selectedFilter?.label === 'Adv. Search';
+	const shouldShowAdvancedSearch = advancedSearchSelected || Boolean(advancedSearchPredicate);
+	const advancedSearchPlaceholder = typeof getAdvancedSearchExamplePlaceholder === 'function'
+		? getAdvancedSearchExamplePlaceholder()
+		: "Example: (bst >= 600 and location has 'route 3')";
+
+	speciesControl?.classList.toggle('advancedSearchMode', advancedSearchSelected);
+	speciesFilterCategory?.classList.remove('advancedOnly');
+	speciesInputWrapper?.classList.remove('hide');
+	speciesFilterSeparator?.classList.remove('hide');
+	if (speciesFilterInput) {
+		speciesFilterInput.placeholder = advancedSearchSelected ? advancedSearchPlaceholder : '';
+	}
+	advancedSearchControl?.classList.toggle('hide', !shouldShowAdvancedSearch);
+	advancedSearchActions?.classList.remove('hide');
+	advancedSearchActions?.classList.add('visible');
 }
 
 // Fills the advanced-search box from a preset shortcut, then runs the query immediately.
 function applyAdvancedSearchShortcut(query) {
-	const input = document.getElementById('advancedSearchInput');
+	const input = document.getElementById('speciesFilterInput');
 	if (!input || typeof runAdvancedSearch !== 'function') {
 		return;
 	}
 
-	setSearchMode('advanced', false);
+	if (typeof selectFilterCategoryByLabel === 'function') {
+		selectFilterCategoryByLabel('Adv. Search');
+	}
+	updateIntegratedSearchControls();
 	input.value = query;
 	input.focus();
 	input.setSelectionRange(input.value.length, input.value.length);

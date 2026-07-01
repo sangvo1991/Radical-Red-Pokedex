@@ -250,13 +250,43 @@ function rememberAdvancedSearchQuery(query) {
 	saveAdvancedSearchHistory();
 }
 
-// Returns whether advanced search should keep showing value/history suggestions.
-function shouldShowAdvancedSearchValueSuggestions() {
-	if (typeof areAdvancedSearchValueSuggestionsDisabled === 'function') {
-		return !areAdvancedSearchValueSuggestionsDisabled();
+// Returns whether the advanced-search autocomplete engine should execute at all.
+function isAdvancedSearchAutocompleteEnabled() {
+	if (typeof areAdvancedSearchSuggestionsEnabled === 'function') {
+		return areAdvancedSearchSuggestionsEnabled();
+	}
+
+	const explicitSetting = getAppearanceSetting('advancedSearchSuggestionsEnabled', null);
+	if (explicitSetting !== null) {
+		return explicitSetting !== false;
 	}
 
 	return getAppearanceSetting('disableValueSuggestions', false) !== true;
+}
+
+// Returns true when the shared category picker is currently set to advanced search mode.
+function isAdvancedSearchCategorySelected() {
+	return selectedFilter?.label === 'Adv. Search';
+}
+
+// Reuses the main search input as the single text box for advanced search queries.
+function getAdvancedSearchInputElement() {
+	return document.getElementById('speciesFilterInput');
+}
+
+// Reuses the normal search dropdown container so advanced autocomplete renders in-place.
+function getAdvancedSearchDropdownElement() {
+	return document.getElementById('speciesFilterInputDropdown');
+}
+
+// Returns the shared input wrapper that anchors the integrated autocomplete popup.
+function getAdvancedSearchInputWrapperElement() {
+	return document.getElementById('speciesFilterInputWrapper');
+}
+
+// Provides the example placeholder text shown when the shared box is in advanced mode.
+function getAdvancedSearchExamplePlaceholder() {
+	return "Example: (bst >= 600 and location has 'route 3')";
 }
 
 // Builds attribute-level suggestions that remain available even when values are suppressed.
@@ -274,71 +304,39 @@ function buildAdvancedSearchAttributeSuggestions(metadata) {
 
 // Wires the advanced search input, autocomplete popup, and action button visibility.
 function setupAdvancedSearch() {
-	const input = document.getElementById('advancedSearchInput');
-	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
-	const wrapper = document.getElementById('advancedSearchInputWrapper');
-	const form = document.getElementById('advancedSearchForm');
+	const input = getAdvancedSearchInputElement();
+	const dropdown = getAdvancedSearchDropdownElement();
+	const wrapper = getAdvancedSearchInputWrapperElement();
 	const actions = document.getElementById('advancedSearchActions');
-	if (!input || !dropdown || !wrapper || !form || !actions) {
+	if (!input || !dropdown || !wrapper || !actions) {
 		return;
 	}
 
-	buildAdvancedSearchAutocompleteMetadata();
-
 	const showAdvancedSearchActions = function() {
-		if (advancedSearchActionsHideTimer) {
-			clearTimeout(advancedSearchActionsHideTimer);
-			advancedSearchActionsHideTimer = null;
-		}
-		if (advancedSearchActionsVisibilityTimer) {
-			clearTimeout(advancedSearchActionsVisibilityTimer);
-			advancedSearchActionsVisibilityTimer = null;
-		}
-
-		if (actions.classList.contains('hide')) {
-			actions.classList.remove('hide');
-			actions.classList.remove('visible');
-			requestAnimationFrame(function() {
-				actions.classList.add('visible');
-			});
-			return;
-		}
-
+		advancedSearchActionsHideTimer = null;
+		advancedSearchActionsVisibilityTimer = null;
+		actions.classList.remove('hide');
 		actions.classList.add('visible');
 	};
 
-	const scheduleHideAdvancedSearchActions = function() {
-		if (advancedSearchActionsHideTimer) {
-			clearTimeout(advancedSearchActionsHideTimer);
-		}
-
-		advancedSearchActionsHideTimer = setTimeout(function() {
-			advancedSearchActionsHideTimer = null;
-			if (document.activeElement === input || form.matches(':hover')) {
-				return;
-			}
-			actions.classList.remove('visible');
-			advancedSearchActionsVisibilityTimer = setTimeout(function() {
-				advancedSearchActionsVisibilityTimer = null;
-				if (!actions.classList.contains('visible')) {
-					actions.classList.add('hide');
-				}
-			}, 100);
-		}, 700);
-	};
+	showAdvancedSearchActions();
 
 	input.addEventListener('keydown', function(event) {
+		if (!isAdvancedSearchCategorySelected()) {
+			return;
+		}
+
 		showAdvancedSearchActions();
 
 		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-			if (advancedSearchAutocompleteSuggestions.length) {
+			if (isAdvancedSearchAutocompleteEnabled() && advancedSearchAutocompleteSuggestions.length) {
 				event.preventDefault();
 				moveAdvancedSearchAutocompleteSelection(event.key === 'ArrowDown' ? 1 : -1);
 			}
 			return;
 		}
 
-		if (event.key === 'Tab' && advancedSearchAutocompleteSuggestions.length) {
+		if (event.key === 'Tab' && isAdvancedSearchAutocompleteEnabled() && advancedSearchAutocompleteSuggestions.length) {
 			event.preventDefault();
 			applyAdvancedSearchAutocompleteSuggestion(
 				advancedSearchAutocompleteSuggestions[Math.max(advancedSearchAutocompleteIndex, 0)]
@@ -347,7 +345,9 @@ function setupAdvancedSearch() {
 		}
 
 		if (event.key === 'Escape') {
-			hideAdvancedSearchAutocomplete();
+			if (isAdvancedSearchAutocompleteEnabled()) {
+				hideAdvancedSearchAutocomplete();
+			}
 			return;
 		}
 
@@ -358,6 +358,10 @@ function setupAdvancedSearch() {
 	});
 
 	input.addEventListener('input', function(event) {
+		if (!isAdvancedSearchCategorySelected()) {
+			return;
+		}
+
 		showAdvancedSearchActions();
 		const nextValue = input.value;
 		const didDelete = (event.inputType && event.inputType.startsWith('delete')) || nextValue.length < advancedSearchLastInputValue.length;
@@ -366,20 +370,36 @@ function setupAdvancedSearch() {
 			refreshSpeciesResults();
 		}
 		advancedSearchLastInputValue = nextValue;
+		if (!isAdvancedSearchAutocompleteEnabled()) {
+			hideAdvancedSearchAutocomplete();
+			return;
+		}
 		refreshAdvancedSearchAutocomplete();
 	});
 	input.addEventListener('click', function() {
+		if (!isAdvancedSearchCategorySelected()) {
+			return;
+		}
+
 		showAdvancedSearchActions();
+		if (!isAdvancedSearchAutocompleteEnabled()) {
+			hideAdvancedSearchAutocomplete();
+			return;
+		}
 		refreshAdvancedSearchAutocomplete();
 	});
 	input.addEventListener('focus', function() {
+		if (!isAdvancedSearchCategorySelected()) {
+			return;
+		}
+
 		showAdvancedSearchActions();
+		if (!isAdvancedSearchAutocompleteEnabled()) {
+			hideAdvancedSearchAutocomplete();
+			return;
+		}
 		refreshAdvancedSearchAutocomplete();
 	});
-	input.addEventListener('blur', scheduleHideAdvancedSearchActions);
-	wrapper.addEventListener('mouseenter', showAdvancedSearchActions);
-	form.addEventListener('mouseenter', showAdvancedSearchActions);
-	form.addEventListener('mouseleave', scheduleHideAdvancedSearchActions);
 
 	document.addEventListener('mousedown', function(event) {
 		if (!wrapper.contains(event.target)) {
@@ -390,7 +410,7 @@ function setupAdvancedSearch() {
 
 // Clears the autocomplete popup and resets its selection state.
 function hideAdvancedSearchAutocomplete() {
-	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
+	const dropdown = getAdvancedSearchDropdownElement();
 	if (!dropdown) {
 		return;
 	}
@@ -399,6 +419,14 @@ function hideAdvancedSearchAutocomplete() {
 	advancedSearchAutocompleteIndex = -1;
 	dropdown.innerHTML = '';
 	dropdown.className = 'hide';
+}
+
+// Clears dropdown state and optionally drops cached autocomplete metadata for performance.
+function clearAdvancedSearchAutocompleteRuntime(dropMetadata = false) {
+	hideAdvancedSearchAutocomplete();
+	if (dropMetadata) {
+		advancedSearchAutocompleteMetadata = null;
+	}
 }
 
 // Moves the highlighted autocomplete row up or down with wrapping behavior.
@@ -420,8 +448,9 @@ function moveAdvancedSearchAutocompleteSelection(direction) {
 
 // Recomputes autocomplete suggestions from the current input and cursor position.
 function refreshAdvancedSearchAutocomplete() {
-	const input = document.getElementById('advancedSearchInput');
-	if (!input) {
+	const input = getAdvancedSearchInputElement();
+	if (!input || !isAdvancedSearchCategorySelected() || !isAdvancedSearchAutocompleteEnabled()) {
+		hideAdvancedSearchAutocomplete();
 		return;
 	}
 
@@ -433,7 +462,7 @@ function refreshAdvancedSearchAutocomplete() {
 
 // Renders the autocomplete list and keeps the active suggestion in view.
 function renderAdvancedSearchAutocomplete() {
-	const dropdown = document.getElementById('advancedSearchAutocompleteDropdown');
+	const dropdown = getAdvancedSearchDropdownElement();
 	if (!dropdown) {
 		return;
 	}
@@ -1006,13 +1035,13 @@ function getAdvancedSearchHistorySuggestions() {
 
 // Returns autocomplete suggestions for either history, plain-name mode, or AST mode.
 function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
+	if (!isAdvancedSearchAutocompleteEnabled()) {
+		return [];
+	}
+
 	const metadata = buildAdvancedSearchAutocompleteMetadata();
-	const allowValueSuggestions = shouldShowAdvancedSearchValueSuggestions();
 
 	if (!String(input || '').trim()) {
-		if (!allowValueSuggestions) {
-			return filterAdvancedSearchSuggestions(buildAdvancedSearchAttributeSuggestions(metadata), '');
-		}
 		return getAdvancedSearchHistorySuggestions();
 	}
 
@@ -1025,9 +1054,6 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 			category: 'attribute',
 			priority: 1
 		}));
-		if (!allowValueSuggestions) {
-			return filterAdvancedSearchSuggestions(attributeSuggestions, plainNameContext.fragment);
-		}
 
 		return filterAdvancedSearchSuggestions(
 			[
@@ -1088,9 +1114,6 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 			);
 		case 'expectValue':
 		case 'expectValueListItem':
-			if (!allowValueSuggestions) {
-				return [];
-			}
 			return filterAdvancedSearchSuggestions(buildAdvancedSearchValueSuggestions(context.attribute), context.fragment);
 		case 'expectValueListDelimiter':
 			return filterAdvancedSearchSuggestions([
@@ -1114,8 +1137,8 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 
 // Applies a selected suggestion into the input and restores cursor/focus state.
 function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
-	const input = document.getElementById('advancedSearchInput');
-	if (!input || !suggestion) {
+	const input = getAdvancedSearchInputElement();
+	if (!input || !suggestion || !isAdvancedSearchCategorySelected()) {
 		return;
 	}
 
@@ -1261,7 +1284,7 @@ function updateAdvancedSearchStatus(message = null, isError = false, results = n
 
 // Parses and activates the advanced-search query, then refreshes the displayed species.
 function runAdvancedSearch() {
-	const input = document.getElementById('advancedSearchInput');
+	const input = getAdvancedSearchInputElement();
 	if (!input) {
 		return;
 	}
@@ -1282,6 +1305,9 @@ function runAdvancedSearch() {
 		advancedSearchLastInputValue = input.value;
 		rememberAdvancedSearchQuery(query);
 		hideAdvancedSearchAutocomplete();
+		if (typeof updateIntegratedSearchControls === 'function') {
+			updateIntegratedSearchControls();
+		}
 		refreshSpeciesResults();
 	}
 	catch (error) {
@@ -1291,7 +1317,7 @@ function runAdvancedSearch() {
 
 // Clears the active query, predicate, and autocomplete state back to defaults.
 function clearAdvancedSearch() {
-	const input = document.getElementById('advancedSearchInput');
+	const input = getAdvancedSearchInputElement();
 	if (input) {
 		input.value = '';
 	}
@@ -1299,6 +1325,9 @@ function clearAdvancedSearch() {
 	advancedSearchLastInputValue = '';
 	clearAdvancedSearchPredicateState();
 	hideAdvancedSearchAutocomplete();
+	if (typeof updateIntegratedSearchControls === 'function') {
+		updateIntegratedSearchControls();
+	}
 	refreshSpeciesResults();
 }
 
@@ -2160,28 +2189,26 @@ function getActiveLocationRenderNames() {
 		return null;
 	}
 
+	if (advancedSearchAst) {
+		const locationAst = extractLocationRenderAst(advancedSearchAst);
+		if (locationAst) {
+			const candidateNames = new Set([
+				...getAdvancedSearchLocationNames(),
+				...getAdvancedSearchOriginalLocationNames()
+			]);
+
+			return new Set(
+				Array.from(candidateNames).filter(locationName => evaluateLocationRenderAst(locationAst, locationName))
+			);
+		}
+	}
+
 	const defaultLocationFilter = filters?.Location?.active;
-	if (currentSearchMode !== 'advanced' && Array.isArray(defaultLocationFilter) && defaultLocationFilter.length) {
+	if (Array.isArray(defaultLocationFilter) && defaultLocationFilter.length) {
 		return new Set(defaultLocationFilter.map(active => active.option).filter(Boolean));
 	}
 
-	if (currentSearchMode !== 'advanced' || !advancedSearchAst) {
-		return null;
-	}
-
-	const locationAst = extractLocationRenderAst(advancedSearchAst);
-	if (!locationAst) {
-		return null;
-	}
-
-	const candidateNames = new Set([
-		...getAdvancedSearchLocationNames(),
-		...getAdvancedSearchOriginalLocationNames()
-	]);
-
-	return new Set(
-		Array.from(candidateNames).filter(locationName => evaluateLocationRenderAst(locationAst, locationName))
-	);
+	return null;
 }
 
 // Recursively collects species ids from mixed encounter/location data structures.

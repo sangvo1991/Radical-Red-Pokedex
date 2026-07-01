@@ -28,7 +28,8 @@ let appearanceSettings = {
 	allowTextSelection: false,
 	hardcoreChangesVisible: true,
 	pokemonOffensiveVisible: true,
-	disableValueSuggestions: false,
+	patchedAbilityExperimental: false,
+	advancedSearchSuggestionsEnabled: true,
 	availableOnly: false
 };
 let appearanceSettingsLoaded = false;

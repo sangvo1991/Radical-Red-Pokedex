@@ -37,20 +37,17 @@ function setupFilters() {
 		o => o,
 		(x,o) => buildSpeciesSearchRecord(x).lists.location.includes(o)
 	);
-	
-	//default filter category
-	selectFilterCategory.value = 'Name';
-	categoryDropdown.className = 'hide';
+
+	buildFilter('Adv. Search', 0, [],
+		o => o,
+		() => true
+	);
 	
 	for (const filter of Object.values(filters)) {
 		let option = document.createElement('li');
 		option.innerText = filter.label;
 		option.addEventListener('mousedown', function() {
-			selectFilterCategory.value = filter.label;
-			selectedFilter = filter;
-			speciesInput.value = '';
-			selectFilterCategory.className = '';
-			categoryDropdown.className = 'hide';
+			selectFilterCategoryByLabel(filter.label, true);
 		});
 		categoryDropdown.append(option);
 	}
@@ -66,11 +63,12 @@ function setupFilters() {
 		}
 	});
 	
-	//also default here for some reason?
-	selectedFilter = filters['Name'];
+	selectFilterCategoryByLabel('Name');
 
 	speciesInput.addEventListener('keyup', function(event) {
 		event.preventDefault();
+		if (selectedFilter?.label === 'Adv. Search')
+			return;
 		if (event.key !== 'Enter')
 			return;
 		let input = speciesInput.value.trim().toLowerCase();
@@ -88,7 +86,45 @@ function setupFilters() {
 	});
 }
 
+// Switches the shared search-category dropdown and synchronizes the integrated advanced-search UI.
+function selectFilterCategoryByLabel(label, shouldFocus = false) {
+	const filter = filters[label];
+	if (!filter)
+		return;
+
+	const isAdvancedSearch = filter.label === 'Adv. Search';
+	selectFilterCategory.value = filter.label;
+	selectedFilter = filter;
+	speciesInput.value = isAdvancedSearch ? (advancedSearchQuery || '') : '';
+	inputDropdown.innerHTML = '';
+	selectFilterCategory.className = '';
+	categoryDropdown.className = 'hide';
+	if (typeof updateIntegratedSearchControls === 'function')
+		updateIntegratedSearchControls();
+
+	if (!shouldFocus)
+		return;
+
+	if (isAdvancedSearch) {
+		advancedSearchLastInputValue = speciesInput.value;
+		speciesInput.focus();
+		speciesInput.setSelectionRange(speciesInput.value.length, speciesInput.value.length);
+		if (typeof refreshAdvancedSearchAutocomplete === 'function')
+			refreshAdvancedSearchAutocomplete();
+		return;
+	}
+
+	speciesInput.focus();
+}
+
 function buildDropdown(event) {
+	if (!selectedFilter) {
+		inputDropdown.innerHTML = '';
+		return;
+	}
+	if (selectedFilter.label === 'Adv. Search')
+		return;
+
 	let input = speciesInput.value.trim().toLowerCase();
 	let options = selectedFilter.options.filter(x => selectedFilter.display(x).toLowerCase().includes(input));
 	inputDropdown.innerHTML = '';
