@@ -82,8 +82,10 @@ let advancedSearchHistory = [];
 let advancedSearchLastInputValue = '';
 let advancedSearchResolvedLocationIndex = null;
 let advancedSearchResolvedLocationNames = null;
+let advancedSearchResolvedLocationOrderMap = null;
 let advancedSearchOriginalLocationIndex = null;
 let advancedSearchOriginalLocationNames = null;
+let advancedSearchOriginalLocationOrderMap = null;
 const ADVANCED_SEARCH_HISTORY_STORAGE_KEY = 'advancedSearchHistory';
 const ADVANCED_SEARCH_HISTORY_LIMIT = 3;
 const ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID = 1375;
@@ -104,8 +106,10 @@ function resetAdvancedFeatureCaches() {
 	advancedSearchAutocompleteIndex = -1;
 	advancedSearchResolvedLocationIndex = null;
 	advancedSearchResolvedLocationNames = null;
+	advancedSearchResolvedLocationOrderMap = null;
 	advancedSearchOriginalLocationIndex = null;
 	advancedSearchOriginalLocationNames = null;
+	advancedSearchOriginalLocationOrderMap = null;
 }
 
 // Deduplicates and alphabetizes display values used by autocomplete metadata.
@@ -300,6 +304,24 @@ function buildAdvancedSearchAttributeSuggestions(metadata) {
 			category: 'attribute'
 		}))
 	];
+}
+
+// Returns the operator list supported by one non-boolean attribute in autocomplete.
+function getAdvancedSearchOperatorSuggestions(attribute) {
+	if (!attribute) {
+		return [];
+	}
+
+	if (attribute.kind === 'number') {
+		return ['=', '!=', 'not', '>', '>=', '<', '<='];
+	}
+
+	const operators = ['=', '!=', '!~', 'not', 'has', '~'];
+	if (isOrderedLocationComparisonAttribute(attribute.name)) {
+		operators.push('>', '>=', '<', '<=');
+	}
+
+	return operators;
 }
 
 // Wires the advanced search input, autocomplete popup, and action button visibility.
@@ -1099,12 +1121,7 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 				return filterAdvancedSearchSuggestions(suggestions, context.fragment);
 			}
 			return filterAdvancedSearchSuggestions(
-				(context.attribute.kind === 'number'
-					? ['=', '!=', 'not', '>', '>=', '<', '<=']
-					: (context.attribute.kind === 'list'
-						? ['=', '!=', '!~', 'not', 'has', '~']
-						: ['=', '!=', '!~', 'not', 'has', '~'])
-				).map(operator => ({
+				getAdvancedSearchOperatorSuggestions(context.attribute).map(operator => ({
 					label: operator,
 					insertText: operator,
 					meta: 'operator',
@@ -1358,6 +1375,156 @@ function locationPhraseIncludes(actualValue, expectedValue) {
 	}
 
 	return actualValue.includes(expectedValue);
+}
+
+// Returns true when an attribute should support ordered location-range comparisons.
+function isOrderedLocationComparisonAttribute(attribute) {
+	return isLocationRenderScopedAttribute(attribute);
+}
+
+// Returns true for the numeric-style operators allowed on ordered location fields.
+function isOrderedLocationComparisonOperator(operator) {
+	return ['>', '>=', '<', '<='].includes(String(operator ?? '').toLowerCase());
+}
+
+// Rebuilds the original-game location list in the same area-id order used by grouped rendering.
+function buildOriginalAdvancedSearchOrderedLocationNames() {
+	const uniqueEntries = new Map();
+	const locationIndex = typeof getSpeciesLocationIndex === 'function'
+		? getSpeciesLocationIndex()
+		: new Map();
+
+	for (const entries of locationIndex.values()) {
+		for (const entry of entries || []) {
+			if (!entry?.name) {
+				continue;
+			}
+
+			const key = entry.key || `${entry.areaId ?? Number.MAX_SAFE_INTEGER}:${entry.name}`;
+			if (!uniqueEntries.has(key)) {
+				uniqueEntries.set(key, entry);
+			}
+		}
+	}
+
+	const orderedNames = Array.from(uniqueEntries.values())
+		.sort((left, right) =>
+			(left.areaId ?? Number.MAX_SAFE_INTEGER) - (right.areaId ?? Number.MAX_SAFE_INTEGER) ||
+			(left.name || '').localeCompare(right.name || '')
+		)
+		.map(entry => entry.name);
+
+	if (!orderedNames.includes('None')) {
+		orderedNames.push('None');
+	}
+
+	return orderedNames;
+}
+
+// Returns the full ordered location list for either resolved or original encounter data.
+function getAdvancedSearchOrderedLocationNames(useResolvedLocations = true) {
+	if (useResolvedLocations && typeof getDefaultSearchLocationNames === 'function') {
+		return getDefaultSearchLocationNames();
+	}
+
+	return buildOriginalAdvancedSearchOrderedLocationNames();
+}
+
+// Caches normalized location-name ranks so range queries compare by in-game location order.
+function buildAdvancedSearchLocationOrderMap(useResolvedLocations = true) {
+	const cachedMap = useResolvedLocations
+		? advancedSearchResolvedLocationOrderMap
+		: advancedSearchOriginalLocationOrderMap;
+	if (cachedMap) {
+		return cachedMap;
+	}
+
+	const orderMap = new Map();
+	getAdvancedSearchOrderedLocationNames(useResolvedLocations).forEach((locationName, index) => {
+		const normalizedLocationName = normalizeSearchText(locationName);
+		if (!normalizedLocationName || normalizedLocationName === 'none' || orderMap.has(normalizedLocationName)) {
+			return;
+		}
+
+		orderMap.set(normalizedLocationName, index);
+	});
+
+	if (useResolvedLocations) {
+		advancedSearchResolvedLocationOrderMap = orderMap;
+		return advancedSearchResolvedLocationOrderMap;
+	}
+
+	advancedSearchOriginalLocationOrderMap = orderMap;
+	return advancedSearchOriginalLocationOrderMap;
+}
+
+// Resolves one display location name to its sortable in-game order rank.
+function resolveAdvancedSearchLocationOrder(locationName, attribute) {
+	const normalizedLocationName = normalizeSearchText(locationName);
+	if (!normalizedLocationName || normalizedLocationName === 'none') {
+		return null;
+	}
+
+	const useResolvedLocations = !['locationoriginal', 'locationsoriginal'].includes(normalizeSearchKey(attribute));
+	return buildAdvancedSearchLocationOrderMap(useResolvedLocations).get(normalizedLocationName) ?? null;
+}
+
+// Applies one ordered comparison to two pre-resolved location ranks.
+function compareAdvancedSearchLocationOrders(actualOrder, operator, expectedOrder) {
+	switch (operator) {
+		case '>':
+			return actualOrder > expectedOrder;
+		case '>=':
+			return actualOrder >= expectedOrder;
+		case '<':
+			return actualOrder < expectedOrder;
+		case '<=':
+			return actualOrder <= expectedOrder;
+		default:
+			return false;
+	}
+}
+
+// Evaluates location range queries by comparing the earliest obtainable location in the species record.
+function evaluateOrderedLocationComparison(actualList, operator, expected, attribute) {
+	if (typeof expected === 'number') {
+		throw new Error(`Attribute "${attribute}" only supports location-name comparisons.`);
+	}
+
+	const expectedValues = Array.isArray(expected) ? expected : [expected];
+	if (expectedValues.length !== 1) {
+		throw new Error(`Operator "${operator}" only supports one location value for "${attribute}".`);
+	}
+
+	const expectedOrder = resolveAdvancedSearchLocationOrder(expectedValues[0], attribute);
+	if (expectedOrder === null) {
+		return false;
+	}
+
+	const actualOrders = actualList
+		.map(locationName => resolveAdvancedSearchLocationOrder(locationName, attribute))
+		.filter(order => typeof order === 'number');
+	if (!actualOrders.length) {
+		return false;
+	}
+
+	return compareAdvancedSearchLocationOrders(Math.min(...actualOrders), operator, expectedOrder);
+}
+
+// Evaluates one grouped-location title against an ordered location range query.
+function evaluateOrderedLocationNameComparison(locationName, operator, expected, attribute) {
+	const expectedValues = Array.isArray(expected) ? expected : [expected];
+	if (expectedValues.length !== 1) {
+		return false;
+	}
+
+	const actualOrder = resolveAdvancedSearchLocationOrder(locationName, attribute);
+	const expectedOrder = resolveAdvancedSearchLocationOrder(expectedValues[0], attribute);
+	if (actualOrder === null || expectedOrder === null) {
+		return false;
+	}
+
+	return compareAdvancedSearchLocationOrders(actualOrder, operator, expectedOrder);
 }
 
 // Builds the species ability package, applying randomizer and Hardcore overrides when needed.
@@ -2079,6 +2246,10 @@ function evaluateStringComparison(actual, operator, expected, attribute) {
 
 // Evaluates list comparisons, including exact, contains, include-any, and negation modes.
 function evaluateListComparison(actualList, operator, expected, attribute = '') {
+	if (isOrderedLocationComparisonAttribute(attribute) && isOrderedLocationComparisonOperator(operator)) {
+		return evaluateOrderedLocationComparison(actualList, operator, expected, attribute);
+	}
+
 	const normalizedActual = actualList.map(normalizeSearchText);
 	const expectedValues = Array.isArray(expected) ? expected : [expected];
 	const normalizedExpected = expectedValues.map(value => normalizeSearchText(value));
@@ -2144,6 +2315,18 @@ function extractLocationRenderAst(ast) {
 
 // Evaluates one location name against a single location-search comparison node.
 function evaluateLocationRenderComparison(locationName, comparison) {
+	if (
+		isOrderedLocationComparisonAttribute(comparison.attribute) &&
+		isOrderedLocationComparisonOperator(comparison.operator)
+	) {
+		return evaluateOrderedLocationNameComparison(
+			locationName,
+			comparison.operator,
+			comparison.value,
+			comparison.attribute
+		);
+	}
+
 	const actualValue = normalizeSearchText(locationName);
 	const expectedValues = (Array.isArray(comparison.value) ? comparison.value : [comparison.value])
 		.filter(value => value !== undefined && value !== null)
