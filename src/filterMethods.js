@@ -6,6 +6,17 @@ let categoryDropdown = document.getElementById('speciesFilterCategoryDropdown');
 let categoryWrapper = document.getElementById('speciesFilterCategoryWrapper');
 let selectedFilter = null;
 
+// Hides the shared suggestion popup when no normal-search matches should be visible.
+function hideDefaultSearchDropdown() {
+	inputDropdown.innerHTML = '';
+	inputDropdown.className = 'hide';
+}
+
+// Reopens the shared suggestion popup for normal search after advanced search hides it.
+function showDefaultSearchDropdown() {
+	inputDropdown.className = '';
+}
+
 function setupFilters() {
 
 	buildFilter('Name', 1,
@@ -82,7 +93,7 @@ function setupFilters() {
 	speciesInput.addEventListener('mousedown', buildDropdown);
 	speciesInput.addEventListener('blur', function(event) {
 		event.preventDefault();
-		inputDropdown.innerHTML = '';
+		hideDefaultSearchDropdown();
 	});
 }
 
@@ -93,10 +104,13 @@ function selectFilterCategoryByLabel(label, shouldFocus = false) {
 		return;
 
 	const isAdvancedSearch = filter.label === 'Adv. Search';
+	const advancedSearchActions = document.getElementById('advancedSearchActions');
 	selectFilterCategory.value = filter.label;
 	selectedFilter = filter;
 	speciesInput.value = isAdvancedSearch ? (advancedSearchQuery || '') : '';
-	inputDropdown.innerHTML = '';
+	hideDefaultSearchDropdown();
+	advancedSearchActions?.classList.toggle('hide', !isAdvancedSearch);
+	advancedSearchActions?.classList.toggle('visible', isAdvancedSearch);
 	selectFilterCategory.className = '';
 	categoryDropdown.className = 'hide';
 	if (typeof updateIntegratedSearchControls === 'function')
@@ -119,7 +133,7 @@ function selectFilterCategoryByLabel(label, shouldFocus = false) {
 
 function buildDropdown(event) {
 	if (!selectedFilter) {
-		inputDropdown.innerHTML = '';
+		hideDefaultSearchDropdown();
 		return;
 	}
 	if (selectedFilter.label === 'Adv. Search')
@@ -127,7 +141,13 @@ function buildDropdown(event) {
 
 	let input = speciesInput.value.trim().toLowerCase();
 	let options = selectedFilter.options.filter(x => selectedFilter.display(x).toLowerCase().includes(input));
+	if (!options.length) {
+		hideDefaultSearchDropdown();
+		return;
+	}
+
 	inputDropdown.innerHTML = '';
+	showDefaultSearchDropdown();
 	for (const option of options) {
 		let wrapper = document.createElement('li');
 		wrapper.innerText = selectedFilter.display(option);

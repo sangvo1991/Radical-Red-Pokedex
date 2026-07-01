@@ -441,8 +441,8 @@ function updateIntegratedSearchControls() {
 		speciesFilterInput.placeholder = advancedSearchSelected ? advancedSearchPlaceholder : '';
 	}
 	advancedSearchControl?.classList.toggle('hide', !shouldShowAdvancedSearch);
-	advancedSearchActions?.classList.remove('hide');
-	advancedSearchActions?.classList.add('visible');
+	advancedSearchActions?.classList.toggle('hide', !advancedSearchSelected);
+	advancedSearchActions?.classList.toggle('visible', advancedSearchSelected);
 }
 
 // Fills the advanced-search box from a preset shortcut, then runs the query immediately.
