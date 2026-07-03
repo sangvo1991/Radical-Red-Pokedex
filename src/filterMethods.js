@@ -109,6 +109,8 @@ function selectFilterCategoryByLabel(label, shouldFocus = false) {
 	selectFilterCategory.value = filter.label;
 	selectedFilter = filter;
 	speciesInput.value = isAdvancedSearch ? (advancedSearchQuery || '') : '';
+	if (!wasAdvancedSearch && isAdvancedSearch && typeof removeFilters === 'function')
+		removeFilters();
 	if (wasAdvancedSearch && !isAdvancedSearch) {
 		advancedSearchLastInputValue = '';
 		if (typeof clearAdvancedSearchPredicateState === 'function')

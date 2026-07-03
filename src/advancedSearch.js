@@ -1299,6 +1299,17 @@ function updateAdvancedSearchStatus(message = null, isError = false, results = n
 	status.className = 'success';
 }
 
+// Writes a one-off status message into the shared advanced-search status line.
+function setAdvancedSearchInlineStatus(message = '', tone = '') {
+	const status = document.getElementById('advancedSearchStatus');
+	if (!status) {
+		return;
+	}
+
+	status.textContent = message;
+	status.className = tone;
+}
+
 // Parses and activates the advanced-search query, then refreshes the displayed species.
 function runAdvancedSearch() {
 	const input = getAdvancedSearchInputElement();

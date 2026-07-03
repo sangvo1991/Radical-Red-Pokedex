@@ -168,6 +168,10 @@ li:hover {
 	color: #9de59d;
 }
 
+#advancedSearchStatus.info {
+	color: white;
+}
+
 .infoHardcoreLabel,
 .infoHardcoreSubLabel,
 .infoItemsLabel,
@@ -580,21 +584,39 @@ li:hover {
 
 .advancedSearchShortcutButton {
 	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
+	align-items: center;
 	flex: 1;
-	width: 100%;
-	padding: 0.45rem 0.55rem;
-	border-radius: 6px;
-	border: 1px solid rgba(255, 255, 255, 0.14);
-	background: rgba(255, 255, 255, 0.03);
+	min-width: 0;
+	padding: 0;
+	border: none;
+	background: none;
 	color: white;
 	text-align: left;
+	cursor: grab;
+	touch-action: none;
+	appearance: none;
+}
+
+.advancedSearchShortcutRemoveButton {
+	flex: 0 0 auto;
+	padding: 0 0 0 0.65rem;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.82);
+	font-size: 1rem;
+	font-weight: 700;
+	line-height: 1;
 	appearance: none;
 }
 
 .advancedSearchShortcutTitle {
-	font-weight: 700;
+	display: block;
+	width: 100%;
+	font-weight: 400;
+	font-family: inherit;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .advancedSearchShortcutQuery {
@@ -606,98 +628,77 @@ li:hover {
 	word-break: break-word;
 }
 
-.advancedSearchShortcutSection + .advancedSearchShortcutSection {
-	margin-top: 0.9rem;
-	padding-top: 0.9rem;
-	border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.advancedSearchShortcutSectionTitle {
-	margin: 0 0 0.55rem 0;
-	font-size: 0.95rem;
-	font-weight: 700;
-}
-
 .advancedSearchShortcutEmptyState {
 	margin: 0;
 	color: rgba(255, 255, 255, 0.65);
 	font-size: 0.9rem;
-}
-
-.advancedSearchShortcutRow + .advancedSearchShortcutRow,
-.advancedSearchShortcutButton + .advancedSearchShortcutButton {
-	margin-top: 0.5rem;
+	padding: 0.2rem 0;
 }
 
 .advancedSearchShortcutRow {
 	display: flex;
-	gap: 0.5rem;
-	align-items: stretch;
+	align-items: center;
+	padding: 0.38rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	min-width: 0;
 }
 
-.advancedSearchShortcutRowActions {
+.advancedSearchShortcutRow:first-of-type {
+	padding-top: 0;
+}
+
+.advancedSearchShortcutRow:last-child {
+	padding-bottom: 0;
+	border-bottom: none;
+}
+
+.advancedSearchShortcutRow.dragging {
+	opacity: 0.35;
+}
+
+.advancedSearchShortcutRow.dragging .advancedSearchShortcutButton {
+	cursor: grabbing;
+}
+
+.advancedSearchShortcutRow.drag-placeholder {
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.advancedSearchShortcutDragPreview {
+	position: fixed;
+	z-index: 9999;
 	display: flex;
-	flex-direction: column;
-	gap: 0.35rem;
+	align-items: center;
+	padding: 0.38rem 0.55rem;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	background: rgba(34, 34, 34, 0.96);
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+	opacity: 0.95;
 }
 
-.advancedSearchShortcutActionButton,
-.advancedSearchShortcutPrimaryButton,
-.advancedSearchShortcutSecondaryButton,
-.advancedSearchShortcutDangerButton {
+.advancedSearchShortcutDragPreview .advancedSearchShortcutButton {
+	cursor: grabbing;
+}
+
+.advancedSearchGuideSuggestions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	margin-top: 0.65rem;
+}
+
+.advancedSearchGuideSuggestionButton {
 	padding: 0.35rem 0.55rem;
 	border-radius: 6px;
 	border: 1px solid rgba(255, 255, 255, 0.16);
 	background: rgba(255, 255, 255, 0.05);
 	color: white;
-	font-size: 0.88rem;
+	font-size: 0.9rem;
 	font-weight: 600;
 	appearance: none;
-}
-
-.advancedSearchShortcutDangerButton {
-	border-color: rgba(255, 120, 120, 0.32);
-	color: rgb(255, 186, 186);
-}
-
-.advancedSearchShortcutEditorTitle {
-	margin-bottom: 0.45rem;
-	font-size: 0.88rem;
-	font-weight: 700;
-	color: rgba(255, 255, 255, 0.78);
-}
-
-.advancedSearchShortcutEditorInput,
-.advancedSearchShortcutEditorTextarea {
-	width: 100%;
-	padding: 0.45rem 0.55rem;
-	border: 1px solid rgba(255, 255, 255, 0.14);
-	border-radius: 6px;
-	background: rgba(255, 255, 255, 0.04);
-	color: white;
-}
-
-.advancedSearchShortcutEditorTextarea {
-	min-height: 5.8rem;
-	resize: vertical;
-}
-
-.advancedSearchShortcutEditorInput::placeholder,
-.advancedSearchShortcutEditorTextarea::placeholder {
-	color: rgba(255, 255, 255, 0.45);
-}
-
-.advancedSearchShortcutEditorTextarea,
-.advancedSearchShortcutEditorInput + .advancedSearchShortcutEditorTextarea {
-	margin-top: 0.45rem;
-}
-
-.advancedSearchShortcutEditorActions,
-.advancedSearchShortcutTransferActions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.45rem;
-	margin-top: 0.55rem;
 }
 
 #settingsExportJsonButton {
@@ -724,7 +725,7 @@ li:hover {
     justify-content: center;
 }
 
-#speciesFilterInput, #speciesFilterCategory, #speciesFilterSeparator, #saveFileInputButton, #clearCurrentSave, #advancedSearchInput, #advancedSearchButton, #advancedSearchClearButton, #advancedSearchGuideButton, #showHelpButton {
+#speciesFilterInput, #speciesFilterCategory, #speciesFilterSeparator, #saveFileInputButton, #clearCurrentSave, #advancedSearchInput, #advancedSearchButton, #advancedSearchClearButton, #advancedSearchSaveButton, #advancedSearchGuideButton, #showHelpButton {
 	display: block;
     padding: 0.2rem;
     border-radius: 3px;
@@ -771,7 +772,7 @@ li:hover {
 	overflow-y: auto;
 }
 
-#advancedSearchButton, #advancedSearchClearButton, #advancedSearchGuideButton {
+#advancedSearchButton, #advancedSearchClearButton, #advancedSearchSaveButton, #advancedSearchGuideButton {
 	min-width: 72px;
 	cursor: pointer;
 }
@@ -942,8 +943,12 @@ tbody {
 	cursor: auto;
 }
 
-.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchShortcutButton:hover, .advancedSearchShortcutActionButton:hover, .advancedSearchShortcutPrimaryButton:hover, .advancedSearchShortcutSecondaryButton:hover, .advancedSearchShortcutDangerButton:hover, .advancedSearchShortcutEditorInput:hover, .advancedSearchShortcutEditorInput:focus, .advancedSearchShortcutEditorTextarea:hover, .advancedSearchShortcutEditorTextarea:focus {
+.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchSaveButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchGuideSuggestionButton:hover, .advancedSearchShortcutRemoveButton:hover {
 	background: rgba(255, 255, 255, 0.075);
+}
+
+.advancedSearchShortcutRow:hover {
+	background: rgba(255, 255, 255, 0.05);
 }
 
 .savePokemonList {
