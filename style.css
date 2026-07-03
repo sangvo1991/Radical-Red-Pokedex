@@ -543,6 +543,9 @@ li:hover {
 
 #advancedSearchShortcutsMenu {
 	min-width: min(360px, calc(100vw - 48px));
+	max-width: min(480px, calc(100vw - 32px));
+	max-height: min(78vh, 720px);
+	overflow-y: auto;
 }
 
 #appearanceSettingsMenu.visible,
@@ -579,6 +582,7 @@ li:hover {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
+	flex: 1;
 	width: 100%;
 	padding: 0.45rem 0.55rem;
 	border-radius: 6px;
@@ -589,12 +593,111 @@ li:hover {
 	appearance: none;
 }
 
+.advancedSearchShortcutTitle {
+	font-weight: 700;
+}
+
+.advancedSearchShortcutQuery {
+	margin-top: 0.2rem;
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 0.82rem;
+	line-height: 1.35;
+	white-space: normal;
+	word-break: break-word;
+}
+
+.advancedSearchShortcutSection + .advancedSearchShortcutSection {
+	margin-top: 0.9rem;
+	padding-top: 0.9rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.advancedSearchShortcutSectionTitle {
+	margin: 0 0 0.55rem 0;
+	font-size: 0.95rem;
+	font-weight: 700;
+}
+
+.advancedSearchShortcutEmptyState {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.65);
+	font-size: 0.9rem;
+}
+
+.advancedSearchShortcutRow + .advancedSearchShortcutRow,
 .advancedSearchShortcutButton + .advancedSearchShortcutButton {
 	margin-top: 0.5rem;
 }
 
-.advancedSearchShortcutTitle {
+.advancedSearchShortcutRow {
+	display: flex;
+	gap: 0.5rem;
+	align-items: stretch;
+}
+
+.advancedSearchShortcutRowActions {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.advancedSearchShortcutActionButton,
+.advancedSearchShortcutPrimaryButton,
+.advancedSearchShortcutSecondaryButton,
+.advancedSearchShortcutDangerButton {
+	padding: 0.35rem 0.55rem;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 0.16);
+	background: rgba(255, 255, 255, 0.05);
+	color: white;
+	font-size: 0.88rem;
+	font-weight: 600;
+	appearance: none;
+}
+
+.advancedSearchShortcutDangerButton {
+	border-color: rgba(255, 120, 120, 0.32);
+	color: rgb(255, 186, 186);
+}
+
+.advancedSearchShortcutEditorTitle {
+	margin-bottom: 0.45rem;
+	font-size: 0.88rem;
 	font-weight: 700;
+	color: rgba(255, 255, 255, 0.78);
+}
+
+.advancedSearchShortcutEditorInput,
+.advancedSearchShortcutEditorTextarea {
+	width: 100%;
+	padding: 0.45rem 0.55rem;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.04);
+	color: white;
+}
+
+.advancedSearchShortcutEditorTextarea {
+	min-height: 5.8rem;
+	resize: vertical;
+}
+
+.advancedSearchShortcutEditorInput::placeholder,
+.advancedSearchShortcutEditorTextarea::placeholder {
+	color: rgba(255, 255, 255, 0.45);
+}
+
+.advancedSearchShortcutEditorTextarea,
+.advancedSearchShortcutEditorInput + .advancedSearchShortcutEditorTextarea {
+	margin-top: 0.45rem;
+}
+
+.advancedSearchShortcutEditorActions,
+.advancedSearchShortcutTransferActions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	margin-top: 0.55rem;
 }
 
 #settingsExportJsonButton {
@@ -839,7 +942,7 @@ tbody {
 	cursor: auto;
 }
 
-.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchShortcutButton:hover {
+.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchShortcutButton:hover, .advancedSearchShortcutActionButton:hover, .advancedSearchShortcutPrimaryButton:hover, .advancedSearchShortcutSecondaryButton:hover, .advancedSearchShortcutDangerButton:hover, .advancedSearchShortcutEditorInput:hover, .advancedSearchShortcutEditorInput:focus, .advancedSearchShortcutEditorTextarea:hover, .advancedSearchShortcutEditorTextarea:focus {
 	background: rgba(255, 255, 255, 0.075);
 }
 

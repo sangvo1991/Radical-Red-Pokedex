@@ -2,7 +2,8 @@ let appearanceSettingsHideTimer = null;
 let appearanceSettingsVisibilityTimer = null;
 let advancedSearchShortcutsHideTimer = null;
 let advancedSearchShortcutsVisibilityTimer = null;
-const ADVANCED_SEARCH_SHORTCUTS = [
+const ADVANCED_SEARCH_SHORTCUTS_STORAGE_KEY = 'advancedSearchShortcuts';
+const ADVANCED_SEARCH_SUGGESTIONS = [
 	{
 		title: 'Sweeper',
 		query: "((ability ~ ('huge','intrepid') and atk >= 95 and spe >= 90) or (ability = 'feline prowess' and spa >= 95 and spe >= 90)) and bst >= 520"
@@ -16,17 +17,68 @@ const ADVANCED_SEARCH_SHORTCUTS = [
 		query: "originalpokemon ~ ('Carnivine','Eiscue','Farfetch','Chatot','Morpeko','Mimikyu','Chillet','Aegislash','Ursaluna')"
 	}
 ];
+let advancedSearchShortcuts = [];
+let advancedSearchShortcutImportInput = null;
 
 // Bootstraps the split feature set and reapplies persisted UI/search state.
 function setupAdvancedFeatures() {
 	buildHardcoreState();
 	loadAppearanceSettings();
 	loadAdvancedSearchHistory();
+	loadAdvancedSearchShortcuts();
 	setupAdvancedSearch();
 	setupAdvancedSearchShortcutsMenu();
 	setupAppearanceSettingsMenu();
 	applyAppearanceSettings();
 	updateIntegratedSearchControls();
+}
+
+// Normalizes one saved quick-search entry into a safe title/query pair.
+function normalizeAdvancedSearchShortcut(shortcut, index = 0) {
+	if (!shortcut || typeof shortcut !== 'object') {
+		return null;
+	}
+
+	const title = String(shortcut.title || '').trim();
+	const query = String(shortcut.query || '').trim();
+	if (!query) {
+		return null;
+	}
+
+	return {
+		title: title || `Quick Search ${index + 1}`,
+		query
+	};
+}
+
+// Loads user-defined quick-search buttons from localStorage.
+function loadAdvancedSearchShortcuts() {
+	try {
+		const raw = localStorage.getItem(ADVANCED_SEARCH_SHORTCUTS_STORAGE_KEY);
+		const parsed = raw ? JSON.parse(raw) : [];
+		const shortcutList = Array.isArray(parsed)
+			? parsed
+			: Array.isArray(parsed?.quickSearches)
+				? parsed.quickSearches
+				: [];
+		advancedSearchShortcuts = shortcutList
+			.map((shortcut, index) => normalizeAdvancedSearchShortcut(shortcut, index))
+			.filter(Boolean);
+	}
+	catch {
+		advancedSearchShortcuts = [];
+	}
+}
+
+// Persists the current quick-search button list independently from uploaded save data.
+function saveAdvancedSearchShortcuts() {
+	try {
+		localStorage.setItem(
+			ADVANCED_SEARCH_SHORTCUTS_STORAGE_KEY,
+			JSON.stringify(advancedSearchShortcuts)
+		);
+	}
+	catch {}
 }
 
 // Loads persisted appearance preferences into the shared runtime settings object.
@@ -463,13 +515,302 @@ function applyAdvancedSearchShortcut(query) {
 	runAdvancedSearch();
 }
 
-// Rebuilds the shortcut menu buttons from the predefined advanced-search presets.
+// Appends one suggestion query into the current advanced-search input without running it.
+function appendAdvancedSearchSuggestion(query) {
+	const input = document.getElementById('speciesFilterInput');
+	if (!input) {
+		return;
+	}
+
+	if (typeof selectFilterCategoryByLabel === 'function') {
+		selectFilterCategoryByLabel('Adv. Search');
+	}
+	updateIntegratedSearchControls();
+	const trimmedCurrentQuery = input.value.trim();
+	input.value = trimmedCurrentQuery ? `${trimmedCurrentQuery} and (${query})` : query;
+	input.focus();
+	input.setSelectionRange(input.value.length, input.value.length);
+	advancedSearchLastInputValue = input.value;
+	if (typeof refreshAdvancedSearchAutocomplete === 'function') {
+		refreshAdvancedSearchAutocomplete();
+	}
+}
+
+// Resets the inline quick-search editor back to create mode.
+function resetAdvancedSearchShortcutEditor(menu) {
+	const titleInput = menu?.querySelector('[data-quick-search-title]');
+	const queryInput = menu?.querySelector('[data-quick-search-query]');
+	const submitButton = menu?.querySelector('[data-quick-search-submit]');
+	const cancelButton = menu?.querySelector('[data-quick-search-cancel]');
+	const editorTitle = menu?.querySelector('[data-quick-search-editor-title]');
+	if (!titleInput || !queryInput || !submitButton || !cancelButton || !editorTitle) {
+		return;
+	}
+
+	titleInput.value = '';
+	queryInput.value = '';
+	submitButton.textContent = 'Add';
+	cancelButton.classList.add('hide');
+	editorTitle.textContent = 'Create Quick Search';
+	delete menu.dataset.editIndex;
+}
+
+// Opens one saved quick-search entry in the inline editor for editing.
+function populateAdvancedSearchShortcutEditor(menu, index) {
+	const shortcut = advancedSearchShortcuts[index];
+	const titleInput = menu?.querySelector('[data-quick-search-title]');
+	const queryInput = menu?.querySelector('[data-quick-search-query]');
+	const submitButton = menu?.querySelector('[data-quick-search-submit]');
+	const cancelButton = menu?.querySelector('[data-quick-search-cancel]');
+	const editorTitle = menu?.querySelector('[data-quick-search-editor-title]');
+	if (!shortcut || !titleInput || !queryInput || !submitButton || !cancelButton || !editorTitle) {
+		return;
+	}
+
+	menu.dataset.editIndex = String(index);
+	titleInput.value = shortcut.title;
+	queryInput.value = shortcut.query;
+	submitButton.textContent = 'Update';
+	cancelButton.classList.remove('hide');
+	editorTitle.textContent = 'Edit Quick Search';
+	titleInput.focus();
+	titleInput.select();
+}
+
+// Downloads the current user-defined quick-search list as JSON.
+function exportAdvancedSearchShortcuts() {
+	const payload = {
+		version: 1,
+		quickSearches: advancedSearchShortcuts
+	};
+	const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = 'rr-dex-quick-searches.json';
+	document.body.append(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(url);
+}
+
+// Imports quick-search buttons from an exported JSON file.
+function importAdvancedSearchShortcutsFromFile(file, menu, hideMenu) {
+	if (!file) {
+		return;
+	}
+
+	const reader = new FileReader();
+	reader.onload = function() {
+		try {
+			const parsed = JSON.parse(String(reader.result || ''));
+			const shortcutList = Array.isArray(parsed)
+				? parsed
+				: Array.isArray(parsed?.quickSearches)
+					? parsed.quickSearches
+					: null;
+			if (!shortcutList) {
+				throw new Error('Invalid quick-search JSON format.');
+			}
+
+			advancedSearchShortcuts = shortcutList
+				.map((shortcut, index) => normalizeAdvancedSearchShortcut(shortcut, index))
+				.filter(Boolean);
+			saveAdvancedSearchShortcuts();
+			renderAdvancedSearchShortcutsMenu(menu, hideMenu);
+		}
+		catch (error) {
+			alert(error.message || 'Failed to import quick searches.');
+		}
+	};
+	reader.onerror = function() {
+		alert('Failed to read the selected file.');
+	};
+	reader.readAsText(file);
+}
+
+// Rebuilds the quick-search menu from the persisted custom buttons and append-only suggestions.
 function renderAdvancedSearchShortcutsMenu(menu, hideMenu) {
 	if (!menu) {
 		return;
 	}
 
-	const shortcutButtons = ADVANCED_SEARCH_SHORTCUTS.map(shortcut => {
+	menu.textContent = '';
+
+	const createSection = function(titleText) {
+		const section = document.createElement('section');
+		section.className = 'advancedSearchShortcutSection';
+
+		const title = document.createElement('h3');
+		title.className = 'advancedSearchShortcutSectionTitle';
+		title.textContent = titleText;
+		section.append(title);
+		return section;
+	};
+
+	const customSection = createSection('Your Quick Searches');
+	if (!advancedSearchShortcuts.length) {
+		const emptyState = document.createElement('p');
+		emptyState.className = 'advancedSearchShortcutEmptyState';
+		emptyState.textContent = 'No custom quick searches yet.';
+		customSection.append(emptyState);
+	}
+
+	advancedSearchShortcuts.forEach((shortcut, index) => {
+		const row = document.createElement('div');
+		row.className = 'advancedSearchShortcutRow';
+
+		const runButton = document.createElement('button');
+		runButton.type = 'button';
+		runButton.className = 'advancedSearchShortcutButton';
+
+		const title = document.createElement('span');
+		title.className = 'advancedSearchShortcutTitle';
+		title.textContent = shortcut.title;
+
+		const preview = document.createElement('span');
+		preview.className = 'advancedSearchShortcutQuery';
+		preview.textContent = shortcut.query;
+
+		runButton.append(title, preview);
+		runButton.addEventListener('click', function() {
+			applyAdvancedSearchShortcut(shortcut.query);
+			hideMenu();
+		});
+
+		const actions = document.createElement('div');
+		actions.className = 'advancedSearchShortcutRowActions';
+
+		const editButton = document.createElement('button');
+		editButton.type = 'button';
+		editButton.className = 'advancedSearchShortcutActionButton';
+		editButton.textContent = 'Edit';
+		editButton.addEventListener('click', function() {
+			populateAdvancedSearchShortcutEditor(menu, index);
+		});
+
+		const deleteButton = document.createElement('button');
+		deleteButton.type = 'button';
+		deleteButton.className = 'advancedSearchShortcutActionButton';
+		deleteButton.textContent = 'Delete';
+		deleteButton.addEventListener('click', function() {
+			advancedSearchShortcuts.splice(index, 1);
+			saveAdvancedSearchShortcuts();
+			renderAdvancedSearchShortcutsMenu(menu, hideMenu);
+		});
+
+		actions.append(editButton, deleteButton);
+		row.append(runButton, actions);
+		customSection.append(row);
+	});
+
+	const editorSection = createSection('Manage Quick Searches');
+	const editorTitle = document.createElement('div');
+	editorTitle.className = 'advancedSearchShortcutEditorTitle';
+	editorTitle.dataset.quickSearchEditorTitle = 'true';
+	editorTitle.textContent = 'Create Quick Search';
+
+	const titleInput = document.createElement('input');
+	titleInput.type = 'text';
+	titleInput.className = 'advancedSearchShortcutEditorInput';
+	titleInput.placeholder = 'Button name';
+	titleInput.dataset.quickSearchTitle = 'true';
+
+	const queryInput = document.createElement('textarea');
+	queryInput.className = 'advancedSearchShortcutEditorTextarea';
+	queryInput.placeholder = 'Advanced search query';
+	queryInput.rows = 4;
+	queryInput.dataset.quickSearchQuery = 'true';
+
+	const editorActions = document.createElement('div');
+	editorActions.className = 'advancedSearchShortcutEditorActions';
+
+	const submitButton = document.createElement('button');
+	submitButton.type = 'button';
+	submitButton.className = 'advancedSearchShortcutPrimaryButton';
+	submitButton.textContent = 'Add';
+	submitButton.dataset.quickSearchSubmit = 'true';
+	submitButton.addEventListener('click', function() {
+		const query = queryInput.value.trim();
+		const title = titleInput.value.trim();
+		if (!query) {
+			alert('Quick search query is required.');
+			queryInput.focus();
+			return;
+		}
+
+		const normalizedShortcut = normalizeAdvancedSearchShortcut({
+			title,
+			query
+		}, advancedSearchShortcuts.length);
+		if (!normalizedShortcut) {
+			alert('Quick search query is required.');
+			queryInput.focus();
+			return;
+		}
+
+		const editIndex = Number(menu.dataset.editIndex);
+		if (Number.isInteger(editIndex) && editIndex >= 0 && editIndex < advancedSearchShortcuts.length) {
+			advancedSearchShortcuts[editIndex] = normalizedShortcut;
+		} else {
+			advancedSearchShortcuts.push(normalizedShortcut);
+		}
+
+		saveAdvancedSearchShortcuts();
+		renderAdvancedSearchShortcutsMenu(menu, hideMenu);
+	});
+
+	const cancelButton = document.createElement('button');
+	cancelButton.type = 'button';
+	cancelButton.className = 'advancedSearchShortcutSecondaryButton hide';
+	cancelButton.textContent = 'Cancel';
+	cancelButton.dataset.quickSearchCancel = 'true';
+	cancelButton.addEventListener('click', function() {
+		resetAdvancedSearchShortcutEditor(menu);
+	});
+
+	editorActions.append(submitButton, cancelButton);
+	editorSection.append(editorTitle, titleInput, queryInput, editorActions);
+
+	const transferSection = createSection('Transfer');
+	const transferActions = document.createElement('div');
+	transferActions.className = 'advancedSearchShortcutTransferActions';
+
+	const exportButton = document.createElement('button');
+	exportButton.type = 'button';
+	exportButton.className = 'advancedSearchShortcutSecondaryButton';
+	exportButton.textContent = 'Export JSON';
+	exportButton.addEventListener('click', exportAdvancedSearchShortcuts);
+
+	const importButton = document.createElement('button');
+	importButton.type = 'button';
+	importButton.className = 'advancedSearchShortcutSecondaryButton';
+	importButton.textContent = 'Import JSON';
+	importButton.addEventListener('click', function() {
+		advancedSearchShortcutImportInput?.click();
+	});
+
+	const clearAllButton = document.createElement('button');
+	clearAllButton.type = 'button';
+	clearAllButton.className = 'advancedSearchShortcutDangerButton';
+	clearAllButton.textContent = 'Clear All';
+	clearAllButton.addEventListener('click', function() {
+		if (!advancedSearchShortcuts.length) {
+			return;
+		}
+		if (!window.confirm('Delete all saved quick searches?')) {
+			return;
+		}
+		advancedSearchShortcuts = [];
+		saveAdvancedSearchShortcuts();
+		renderAdvancedSearchShortcutsMenu(menu, hideMenu);
+	});
+
+	transferActions.append(exportButton, importButton, clearAllButton);
+	transferSection.append(transferActions);
+
+	const suggestionSection = createSection('Suggestions');
+	ADVANCED_SEARCH_SUGGESTIONS.forEach(shortcut => {
 		const button = document.createElement('button');
 		button.type = 'button';
 		button.className = 'advancedSearchShortcutButton';
@@ -478,15 +819,19 @@ function renderAdvancedSearchShortcutsMenu(menu, hideMenu) {
 		title.className = 'advancedSearchShortcutTitle';
 		title.textContent = shortcut.title;
 
-		button.append(title);
+		const preview = document.createElement('span');
+		preview.className = 'advancedSearchShortcutQuery';
+		preview.textContent = shortcut.query;
+
+		button.append(title, preview);
 		button.addEventListener('click', function() {
-			applyAdvancedSearchShortcut(shortcut.query);
-			hideMenu();
+			appendAdvancedSearchSuggestion(shortcut.query);
 		});
-		return button;
+		suggestionSection.append(button);
 	});
 
-	menu.replaceChildren(...shortcutButtons);
+	menu.append(customSection, editorSection, transferSection, suggestionSection);
+	resetAdvancedSearchShortcutEditor(menu);
 }
 
 // Wires the shortcut popup so it mirrors the same click/fade interaction used by settings.
@@ -496,6 +841,19 @@ function setupAdvancedSearchShortcutsMenu() {
 	const menu = document.getElementById('advancedSearchShortcutsMenu');
 	if (!wrapper || !button || !menu) {
 		return;
+	}
+
+	if (!advancedSearchShortcutImportInput) {
+		advancedSearchShortcutImportInput = document.createElement('input');
+		advancedSearchShortcutImportInput.type = 'file';
+		advancedSearchShortcutImportInput.accept = 'application/json,.json';
+		advancedSearchShortcutImportInput.className = 'hide';
+		advancedSearchShortcutImportInput.addEventListener('change', function(event) {
+			const file = event.target.files?.[0];
+			importAdvancedSearchShortcutsFromFile(file, menu, hideMenu);
+			event.target.value = '';
+		});
+		document.body.append(advancedSearchShortcutImportInput);
 	}
 
 	const showMenu = function() {

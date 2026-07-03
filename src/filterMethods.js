@@ -103,11 +103,21 @@ function selectFilterCategoryByLabel(label, shouldFocus = false) {
 	if (!filter)
 		return;
 
+	const wasAdvancedSearch = selectedFilter?.label === 'Adv. Search';
 	const isAdvancedSearch = filter.label === 'Adv. Search';
 	const advancedSearchActions = document.getElementById('advancedSearchActions');
 	selectFilterCategory.value = filter.label;
 	selectedFilter = filter;
 	speciesInput.value = isAdvancedSearch ? (advancedSearchQuery || '') : '';
+	if (wasAdvancedSearch && !isAdvancedSearch) {
+		advancedSearchLastInputValue = '';
+		if (typeof clearAdvancedSearchPredicateState === 'function')
+			clearAdvancedSearchPredicateState();
+		if (typeof hideAdvancedSearchAutocomplete === 'function')
+			hideAdvancedSearchAutocomplete();
+		if (typeof refreshSpeciesResults === 'function')
+			refreshSpeciesResults();
+	}
 	hideDefaultSearchDropdown();
 	advancedSearchActions?.classList.toggle('hide', !isAdvancedSearch);
 	advancedSearchActions?.classList.toggle('visible', isAdvancedSearch);
