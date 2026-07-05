@@ -29,24 +29,25 @@ function setupAdvancedFeatures() {
 	setupAdvancedSearch();
 	setupAdvancedSearchShortcutsMenu();
 	setupAppearanceSettingsMenu();
+	if (typeof setupFavoritesFeature === 'function') {
+		setupFavoritesFeature();
+	}
 	applyAppearanceSettings();
 	updateIntegratedSearchControls();
 }
 
-// Normalizes one saved quick-search entry into a safe title/query pair.
-function normalizeAdvancedSearchShortcut(shortcut, index = 0) {
+// Normalizes one saved quick-search entry into a safe query payload.
+function normalizeAdvancedSearchShortcut(shortcut) {
 	if (!shortcut || typeof shortcut !== 'object') {
 		return null;
 	}
 
-	const title = String(shortcut.title || '').trim();
 	const query = String(shortcut.query || '').trim();
 	if (!query) {
 		return null;
 	}
 
 	return {
-		title: title || `Quick Search ${index + 1}`,
 		query
 	};
 }
@@ -62,7 +63,7 @@ function loadAdvancedSearchShortcuts() {
 				? parsed.quickSearches
 				: [];
 		advancedSearchShortcuts = shortcutList
-			.map((shortcut, index) => normalizeAdvancedSearchShortcut(shortcut, index))
+			.map(shortcut => normalizeAdvancedSearchShortcut(shortcut))
 			.filter(Boolean);
 	}
 	catch {
@@ -97,6 +98,7 @@ function loadAppearanceSettings() {
 		pokemonOffensiveVisible: storedSettings.pokemonOffensiveVisible !== false,
 		patchedAbilityExperimental: storedSettings.patchedAbilityExperimental === true,
 		advancedSearchSuggestionsEnabled,
+		favoritesEnabled: storedSettings.favoritesEnabled === true || storedSettings.buildTeamEnabled === true,
 		availableOnly: storedSettings.availableOnly === true
 	};
 	appearanceSettingsLoaded = true;
@@ -145,6 +147,11 @@ function isPatchedAbilityExperimentalEnabled() {
 // Returns whether advanced search autocomplete should run at all.
 function areAdvancedSearchSuggestionsEnabled() {
 	return appearanceSettings.advancedSearchSuggestionsEnabled !== false;
+}
+
+// Returns whether Favorites should be visible and interactive.
+function isFavoritesEnabled() {
+	return appearanceSettings.favoritesEnabled === true;
 }
 
 // Returns whether species lists should always be filtered to obtainable Pokemon.
@@ -254,6 +261,21 @@ function setAdvancedSearchSuggestionsEnabled(enabled, persist = true) {
 	}
 }
 
+// Shows or hides Favorites controls and refreshes row icon state.
+function setFavoritesEnabled(enabled, persist = true) {
+	appearanceSettings.favoritesEnabled = enabled === true;
+	if (persist) {
+		persistAppearanceSettings();
+	}
+	updateAppearanceSettingsControls();
+	if (typeof syncFavoritesFeatureVisibility === 'function') {
+		syncFavoritesFeatureVisibility();
+	}
+	if (typeof refreshFavoritesRowStates === 'function') {
+		refreshFavoritesRowStates();
+	}
+}
+
 // Forces the species list to only show obtainable Pokemon in both search modes.
 function setAvailableOnlyEnabled(enabled, persist = true) {
 	appearanceSettings.availableOnly = enabled === true;
@@ -274,6 +296,9 @@ function applyAppearanceSettings() {
 		renderCurrentSavePokemon();
 	}
 	updateAppearanceSettingsControls();
+	if (typeof syncFavoritesFeatureVisibility === 'function') {
+		syncFavoritesFeatureVisibility();
+	}
 	updateIntegratedSearchControls();
 	refreshSpeciesResults();
 }
@@ -289,6 +314,7 @@ function updateAppearanceSettingsControls() {
 	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
 	const advancedSearchSuggestionsOption = document.getElementById('appearanceAdvancedSearchSuggestionsOption');
 	const advancedSearchSuggestionsToggle = document.getElementById('appearanceAdvancedSearchSuggestionsToggle');
+	const favoritesToggle = document.getElementById('appearanceFavoritesToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
@@ -307,6 +333,9 @@ function updateAppearanceSettingsControls() {
 	if (advancedSearchSuggestionsToggle) {
 		advancedSearchSuggestionsToggle.checked = areAdvancedSearchSuggestionsEnabled();
 		advancedSearchSuggestionsToggle.disabled = false;
+	}
+	if (favoritesToggle) {
+		favoritesToggle.checked = isFavoritesEnabled();
 	}
 	if (availableOnlyToggle) {
 		availableOnlyToggle.checked = isAvailableOnlyEnabled();
@@ -333,6 +362,7 @@ function setupAppearanceSettingsMenu() {
 	const currentTeamToggle = document.getElementById('appearanceCurrentTeamToggle');
 	const gameProgressionToggle = document.getElementById('appearanceGameProgressionToggle');
 	const advancedSearchSuggestionsToggle = document.getElementById('appearanceAdvancedSearchSuggestionsToggle');
+	const favoritesToggle = document.getElementById('appearanceFavoritesToggle');
 	const availableOnlyToggle = document.getElementById('appearanceAvailableOnlyToggle');
 	const locationBaseOrderToggle = document.getElementById('appearanceLocationBaseOrderToggle');
 	const allowTextSelectionToggle = document.getElementById('appearanceAllowTextSelectionToggle');
@@ -444,6 +474,9 @@ function setupAppearanceSettingsMenu() {
 	});
 	advancedSearchSuggestionsToggle?.addEventListener('change', function() {
 		setAdvancedSearchSuggestionsEnabled(advancedSearchSuggestionsToggle.checked);
+	});
+	favoritesToggle?.addEventListener('change', function() {
+		setFavoritesEnabled(favoritesToggle.checked);
 	});
 	availableOnlyToggle?.addEventListener('change', function() {
 		setAvailableOnlyEnabled(availableOnlyToggle.checked);
@@ -557,9 +590,8 @@ function saveCurrentAdvancedSearchShortcut() {
 	}
 
 	const normalizedShortcut = normalizeAdvancedSearchShortcut({
-		title: query,
 		query
-	}, advancedSearchShortcuts.length);
+	});
 	if (!normalizedShortcut) {
 		if (typeof setAdvancedSearchInlineStatus === 'function') {
 			setAdvancedSearchInlineStatus('Save Search failed. Run a valid advanced search first.', 'info');
@@ -608,7 +640,7 @@ function addGuideSuggestedQuickSearch(index) {
 		return;
 	}
 
-	const normalizedShortcut = normalizeAdvancedSearchShortcut(suggestion, advancedSearchShortcuts.length);
+	const normalizedShortcut = normalizeAdvancedSearchShortcut(suggestion);
 	if (!normalizedShortcut) {
 		return;
 	}

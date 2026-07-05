@@ -60,6 +60,7 @@ function setupTables() {
 
 	setupTable('speciesTable', displaySpeciesRow, 50,
 		{
+			'': null,
 			'#': cmp(x => x.dexID),
 			'Sprite': null,
 			'Name': cmp(x => x.name),

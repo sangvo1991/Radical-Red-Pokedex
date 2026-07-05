@@ -30,6 +30,7 @@ let appearanceSettings = {
 	pokemonOffensiveVisible: true,
 	patchedAbilityExperimental: false,
 	advancedSearchSuggestionsEnabled: true,
+	favoritesEnabled: false,
 	availableOnly: false
 };
 let appearanceSettingsLoaded = false;

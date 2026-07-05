@@ -13,7 +13,8 @@ function displaySpeciesRow(tracker, mon) {
 	buildBackgroundColor(currentRow, mon);
 	
 	currentRow.append(
-		buildWrapper('td', 'speciesDexIDWrapper', mon.dexID),
+		buildWrapperSpeciesFavoriteToggle('td', mon),
+		buildWrapperSpeciesDexID('td', mon),
 		buildWrapperSprite('td', 'speciesSprite', getSprite(mon.ID)),
 		buildWrapper('td', 'speciesNameWrapper', mon.key),
 		buildWrapperTypes('td', 'speciesTypes', types[mon.type[0]], types[mon.type[1]]),
@@ -64,8 +65,23 @@ function displayMovesRow(tracker, move) {
 
 function displaySpeciesPanel(mon, saveEntry = null) {
 	let infoDisplay = document.getElementById('speciesPanelInfoDisplay');
+	let speciesModalBody = document.querySelector('#speciesModal .modal-body');
 	const filterMoveEntries = entries => entries?.filter(entry => entry !== undefined) || [];
 	currentSpeciesPanelState = { mon, saveEntry };
+	if (speciesModalBody) {
+		speciesModalBody.querySelector('.speciesModalFavoritesToggle')?.remove();
+		if (typeof createFavoritesToggle === 'function') {
+			const modalToggle = createFavoritesToggle(mon, { className: 'speciesModalFavoritesToggle' });
+			const closeButton = speciesModalBody.querySelector('.close');
+			if (closeButton?.nextSibling) {
+				speciesModalBody.insertBefore(modalToggle, closeButton.nextSibling);
+			}
+			else {
+				speciesModalBody.append(modalToggle);
+			}
+		}
+	}
+	const infoChildren = [];
 	let tables = [
 		['speciesLearnsetPrevoExclusiveTable', filterMoveEntries(mon.prevoMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x)))],
 		['speciesLearnsetLevelUpTable', filterMoveEntries(mon.levelupMoves?.map(x => buildSpeciesPanelMoveEntry(mon, x[0], x[1])))],
@@ -77,13 +93,14 @@ function displaySpeciesPanel(mon, saveEntry = null) {
 	
 	infoDisplay.innerText = '';
 	
-	infoDisplay.append(
+	infoChildren.push(
 		buildWrapperSprite('div', 'infoSprite', getSprite(mon.ID)),
 		buildWrapper('div', 'infoNameName', mon.key),
 		buildWrapper('div', 'infoDexIDWrapper',  '#' + mon.dexID),
 		buildWrapperTypes('div', 'infoTypes', types[mon.type[0]], types[mon.type[1]]),
 		buildWrapperAbilitiesFull('div', 'infoAbilities', mon.abilities, mon.ID)
 	);
+	infoDisplay.append(...infoChildren);
 	
 	let statWrapper = buildWrapper('div', 'infoStats');
 	statWrapper.append(
@@ -169,6 +186,22 @@ function buildWrapper(tag, className, text=null) {
 	if (text === 0)
 		wrapper.textContent = '-';
 	
+	return wrapper;
+}
+
+function buildWrapperSpeciesFavoriteToggle(tag, mon) {
+	let wrapper = buildWrapper(tag, 'speciesFavoriteToggleWrapper');
+	let toggle = typeof createFavoritesToggle === 'function'
+		? createFavoritesToggle(mon)
+		: buildWrapper('button', 'favoritesToggle');
+
+	wrapper.append(toggle);
+	return wrapper;
+}
+
+function buildWrapperSpeciesDexID(tag, mon) {
+	let wrapper = buildWrapper(tag, 'speciesDexIDWrapper');
+	wrapper.append(buildWrapper('span', 'speciesDexIDValue', mon.dexID));
 	return wrapper;
 }
 

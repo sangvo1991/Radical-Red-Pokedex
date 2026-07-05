@@ -793,10 +793,13 @@ function openSaveFileDialog() {
 }
 
 function clearCurrentSave() {
-    processSaveData(undefined);
+    processSaveData(undefined, {resetFavorites: true});
 }
 
-function processSaveData(data) {
+function processSaveData(data, options = {}) {
+    const {
+        resetFavorites = false,
+    } = options;
     saveData = data ? {
         ...data,
         parserVersion: SAVE_DATA_PARSER_VERSION,
@@ -811,6 +814,9 @@ function processSaveData(data) {
     }
     if (typeof resetAdvancedFeatureCaches === "function") {
         resetAdvancedFeatureCaches();
+    }
+    if (resetFavorites && typeof clearFavoritesList === "function") {
+        clearFavoritesList();
     }
 
     if (saveData) {
@@ -880,7 +886,7 @@ if (saveFileInputElement) {
                     alert("Unable to read save data. Please ensure you've selected a save and not a save state (Most likely a .sav file)");
                     return;
                 }
-                processSaveData(data);
+                processSaveData(data, {resetFavorites: true});
             })
         }
     });

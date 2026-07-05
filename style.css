@@ -252,9 +252,14 @@ li:hover {
 	transition-delay: 0.5s;
 }
 
+#speciesModal .modal-body {
+	position: relative;
+}
+
 #speciesPanelInfoDisplay {
 	color: white;
 	text-align: center;
+	width: 100%;
 	display: -webkit-box;      /* OLD - iOS 6-, Safari 3.1-6 */
     display: -moz-box;         /* OLD - Firefox 19- (buggy but mostly works) */
     display: -ms-flexbox;      /* TWEENER - IE 10 */
@@ -263,6 +268,22 @@ li:hover {
 	flex-direction: column;
 	align-items: center;
 	clear: right;
+}
+
+#speciesModal .speciesModalFavoritesToggle {
+	position: absolute;
+	top: 12px;
+	left: 12px;
+	width: 28px;
+	min-width: 28px;
+	font-size: 1.7rem;
+	transform: none;
+	z-index: 2;
+}
+
+#speciesModal .speciesModalFavoritesToggle.favoritesToggleEnabled {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 .infoSprite {
@@ -496,6 +517,17 @@ li:hover {
 	gap: 15px;
 }
 
+#topLeftMenuRow {
+	position: fixed;
+	top: 24px;
+	left: 24px;
+	z-index: 10;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: flex-start;
+}
+
 #topRightMenuRow {
 	position: fixed;
 	top: 24px;
@@ -507,6 +539,7 @@ li:hover {
 	align-items: flex-start;
 }
 
+#favoritesWrapper,
 #appearanceSettingsWrapper,
 #advancedSearchShortcutsWrapper {
 	position: relative;
@@ -515,6 +548,15 @@ li:hover {
 	align-items: flex-end;
 }
 
+#favoritesWrapper {
+	align-items: flex-start;
+}
+
+#favoritesWrapper.hide {
+	display: none;
+}
+
+#favoritesButton,
 #appearanceSettingsButton,
 #advancedSearchShortcutsButton {
 	display: block;
@@ -527,6 +569,7 @@ li:hover {
 	appearance: none;
 }
 
+#favoritesMenu,
 #appearanceSettingsMenu,
 #advancedSearchShortcutsMenu {
 	position: absolute;
@@ -545,6 +588,16 @@ li:hover {
 	transform-origin: top right;
 }
 
+#favoritesMenu {
+	left: 0;
+	right: auto;
+	min-width: min(320px, calc(100vw - 48px));
+	max-width: min(420px, calc(100vw - 32px));
+	max-height: min(78vh, 720px);
+	overflow-y: auto;
+	transform-origin: top left;
+}
+
 #advancedSearchShortcutsMenu {
 	min-width: min(360px, calc(100vw - 48px));
 	max-width: min(480px, calc(100vw - 32px));
@@ -552,6 +605,7 @@ li:hover {
 	overflow-y: auto;
 }
 
+#favoritesMenu.visible,
 #appearanceSettingsMenu.visible,
 #advancedSearchShortcutsMenu.visible {
 	opacity: 1;
@@ -580,6 +634,93 @@ li:hover {
 .appearanceSettingsSubOption {
 	margin-left: 1.45rem;
 	font-size: 0.95rem;
+}
+
+.favoritesMenuRow {
+	display: flex;
+	align-items: center;
+	gap: 0.7rem;
+	padding: 0.4rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	min-width: 0;
+	cursor: pointer;
+}
+
+.favoritesMenuRow:hover,
+.favoritesMenuRow:focus-visible {
+	background: rgba(255, 255, 255, 0.05);
+	outline: none;
+}
+
+.favoritesMenuRow:last-of-type {
+	border-bottom: none;
+}
+
+.favoritesMenuSprite {
+	flex: 0 0 auto;
+	width: 44px;
+	height: 44px;
+	image-rendering: pixelated;
+}
+
+.favoritesMenuInfo {
+	flex: 1;
+	min-width: 0;
+	text-align: left;
+}
+
+.favoritesMenuName {
+	font-weight: 600;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.favoritesMenuAbility {
+	color: rgba(255, 255, 255, 0.72);
+	font-size: 0.85rem;
+	font-style: italic;
+	line-height: 1.2;
+	white-space: normal;
+	word-break: break-word;
+}
+
+.favoritesMenuRemoveButton {
+	flex: 0 0 auto;
+	padding: 0 0 0 0.5rem;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.82);
+	font-size: 1rem;
+	font-weight: 700;
+	line-height: 1;
+	appearance: none;
+}
+
+.favoritesMenuClearButton {
+	display: block;
+	width: auto;
+	margin-left: auto;
+	padding: 0.3rem 0 0;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.68);
+	font-size: 0.9rem;
+	text-align: right;
+	appearance: none;
+}
+
+.favoritesMenuClearButton:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.favoritesEmptyState {
+	margin: 0;
+	color: rgba(255, 255, 255, 0.65);
+	font-size: 0.9rem;
+	padding: 0.2rem 0 0.45rem;
 }
 
 .advancedSearchShortcutButton {
@@ -617,15 +758,6 @@ li:hover {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-
-.advancedSearchShortcutQuery {
-	margin-top: 0.2rem;
-	color: rgba(255, 255, 255, 0.72);
-	font-size: 0.82rem;
-	line-height: 1.35;
-	white-space: normal;
-	word-break: break-word;
 }
 
 .advancedSearchShortcutEmptyState {
@@ -787,6 +919,13 @@ li:hover {
 	}
 }
 
+@media (hover: none) {
+	.favoritesToggleEnabled:not(.favoritesToggleChecked):not(.favoritesToggleFullFlash) {
+		opacity: 1;
+		transition: none;
+	}
+}
+
 #activeFilters, #currentSave {
 	display: -webkit-box;      /* OLD - iOS 6-, Safari 3.1-6 */
     display: -moz-box;         /* OLD - Firefox 19- (buggy but mostly works) */
@@ -943,7 +1082,7 @@ tbody {
 	cursor: auto;
 }
 
-.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchSaveButton:hover, #advancedSearchGuideButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchGuideSuggestionButton:hover, .advancedSearchShortcutRemoveButton:hover {
+.active, .sortOption:hover, #speciesFilterInput:hover, #speciesFilterCategory:hover, #speciesFilterInput:focus, #advancedSearchInput:hover, #advancedSearchInput:focus, #showHelpButton:hover, #saveFileInputButton:hover, #clearCurrentSave:hover, #advancedSearchButton:hover, #advancedSearchClearButton:hover, #advancedSearchSaveButton:hover, #advancedSearchGuideButton:hover, #favoritesButton:hover, #appearanceSettingsButton:hover, #advancedSearchShortcutsButton:hover, #settingsExportJsonButton:hover, .activeFilter:hover, .advancedSearchGuideSuggestionButton:hover, .advancedSearchShortcutRemoveButton:hover, .favoritesMenuRemoveButton:hover, .favoritesMenuClearButton:not(:disabled):hover {
 	background: rgba(255, 255, 255, 0.075);
 }
 
@@ -1119,6 +1258,94 @@ tbody {
 .speciesDexIDWrapper {
 	min-width: 67.9px;
 	font-weight: 700;
+	text-align: center;
+}
+
+.speciesDexIDValue {
+	display: inline-block;
+	min-width: 1.5ch;
+	text-align: center;
+}
+
+#speciesTable .speciesFavoriteToggleWrapper {
+	width: 20px;
+	min-width: 20px;
+	padding-left: 0;
+	padding-right: 0;
+	text-align: center;
+	vertical-align: middle !important;
+}
+
+#speciesTable .speciesFavoriteToggleWrapper > .favoritesToggle {
+	position: relative;
+	left: 12px;
+	top: auto;
+	display: inline-block;
+	transform: none;
+}
+
+#speciesTable .speciesDexIDWrapper {
+	min-width: 47.9px;
+	padding-left: 0;
+	padding-right: 0;
+	vertical-align: middle !important;
+}
+
+.favoritesToggle {
+	position: absolute;
+	left: 0;
+	top: 50%;
+	width: 20px;
+	min-width: 20px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.7);
+	font-size: 1.45rem;
+	line-height: 1;
+	opacity: 0;
+	pointer-events: none;
+	appearance: none;
+	transform: translateY(-50%);
+	transition: opacity 50ms linear, color 120ms ease;
+}
+
+.favoritesToggle::before {
+	content: "☆";
+}
+
+.favoritesToggleEnabled {
+	pointer-events: auto;
+}
+
+.speciesRow:hover .favoritesToggleEnabled:not(.favoritesToggleChecked):not(.favoritesToggleFullFlash),
+.favoritesToggleEnabled:focus-visible:not(.favoritesToggleChecked):not(.favoritesToggleFullFlash) {
+	opacity: 1;
+	transition-duration: 0ms, 120ms;
+}
+
+.favoritesToggleChecked {
+	opacity: 1;
+	color: #f1c232;
+	transition-duration: 0ms, 120ms;
+}
+
+.favoritesToggleChecked::before {
+	content: "★";
+}
+
+.favoritesToggleFullFlash {
+	opacity: 1;
+	color: #ff5c5c;
+	transition-duration: 0ms, 0ms;
+}
+
+.favoritesToggleFullFlash::before {
+	content: "★";
+}
+
+.favoritesToggle:disabled {
+	cursor: default;
 }
 
 .speciesSprite {
@@ -1310,6 +1537,15 @@ td.moveDescriptionWrapper {
 		border-top: solid thin #757575;
 	}
 	
+		#speciesTable .speciesFavoriteToggleWrapper {
+			position: absolute;
+			left: 14%;
+			top: 12%;
+		width: 20px;
+		min-width: 20px;
+		padding: 0;
+	}
+
 	.speciesDexIDWrapper {
 		position: absolute;
 		left: 21%;

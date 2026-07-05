@@ -6,7 +6,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 	<!-- Bootstrap CSS -->
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-	<link rel="stylesheet" href="style.css?v=20260703-quick-search-drag-visual">
+	<link rel="stylesheet" href="style.css?v=20260705-favorites-modal-fix">
 	<link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/JwowSquared/Radical-Red-Pokedex/master/favicon.ico">
 	<title>RR Dex</title>
 </head>
@@ -15,6 +15,12 @@
 		<p>Loading Radical Red Pokedex...</p>
 	</div>
 	<main class="hide">
+		<div id="topLeftMenuRow">
+			<div id="favoritesWrapper" class="hide">
+				<button id="favoritesButton" type="button" aria-expanded="false">Favorites</button>
+				<div id="favoritesMenu" class="hide" tabindex="-1"></div>
+			</div>
+		</div>
 		<div id="topRightMenuRow">
 			<div id="advancedSearchShortcutsWrapper">
 				<button id="advancedSearchShortcutsButton" type="button" aria-expanded="false">Quick Search</button>
@@ -30,6 +36,10 @@
 					<label class="appearanceSettingsOption">
 						<input type="checkbox" id="appearanceAvailableOnlyToggle">
 						<span>Available Pokemons Only</span>
+					</label>
+					<label class="appearanceSettingsOption">
+						<input type="checkbox" id="appearanceFavoritesToggle">
+						<span>Favorites</span>
 					</label>
 					<label class="appearanceSettingsOption">
 						<input type="checkbox" id="appearanceCurrentTeamToggle">
@@ -237,13 +247,14 @@
 		<script src="src/locationMetadata.js"></script>
 		<script src="src/tableMethods.js"></script>
 		<script src="src/sortMethods.js"></script>
-		<script src="src/displayMethods.js"></script>
-		<script src="src/filterMethods.js?v=20260703-quick-search-drag-visual"></script>
+		<script src="src/displayMethods.js?v=20260705-favorites-modal-fix"></script>
+		<script src="src/filterMethods.js?v=20260705-build-team"></script>
 		<script src="src/utility.js"></script>
 	<script src="src/abilityRandomizer.js"></script>
 	<script src="src/advancedSearchMetadata.js"></script>
-	<script src="src/advancedSearch.js?v=20260703-quick-search-drag-visual"></script>
-	<script src="src/settings.js?v=20260703-quick-search-drag-visual"></script>
+	<script src="src/advancedSearch.js?v=20260705-build-team"></script>
+	<script src="src/settings.js?v=20260705-favorites-modal-fix"></script>
+	<script src="src/teamBuilder.js?v=20260705-favorites-modal-fix"></script>
 	<script src="src/onStartUp.js"></script>
 	<!-- jQuery first, then Popper.js, then Bootstrap JS -->
 	<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
