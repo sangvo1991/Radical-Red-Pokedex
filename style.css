@@ -1267,7 +1267,8 @@ tbody {
 	text-align: center;
 }
 
-#speciesTable .speciesFavoriteToggleWrapper {
+#speciesTable .speciesFavoriteToggleWrapper,
+.locationSpeciesTableWrapper .speciesFavoriteToggleWrapper {
 	width: 20px;
 	min-width: 20px;
 	padding-left: 0;
@@ -1276,7 +1277,8 @@ tbody {
 	vertical-align: middle !important;
 }
 
-#speciesTable .speciesFavoriteToggleWrapper > .favoritesToggle {
+#speciesTable .speciesFavoriteToggleWrapper > .favoritesToggle,
+.locationSpeciesTableWrapper .speciesFavoriteToggleWrapper > .favoritesToggle {
 	position: relative;
 	left: 12px;
 	top: auto;
@@ -1284,7 +1286,8 @@ tbody {
 	transform: none;
 }
 
-#speciesTable .speciesDexIDWrapper {
+#speciesTable .speciesDexIDWrapper,
+.locationSpeciesTableWrapper .speciesDexIDWrapper {
 	min-width: 47.9px;
 	padding-left: 0;
 	padding-right: 0;
@@ -1537,7 +1540,8 @@ td.moveDescriptionWrapper {
 		border-top: solid thin #757575;
 	}
 	
-		#speciesTable .speciesFavoriteToggleWrapper {
+		#speciesTable .speciesFavoriteToggleWrapper,
+		.locationSpeciesTableWrapper .speciesFavoriteToggleWrapper {
 			position: absolute;
 			left: 14%;
 			top: 12%;
