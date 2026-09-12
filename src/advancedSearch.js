@@ -89,6 +89,23 @@ let advancedSearchOriginalLocationOrderMap = null;
 const ADVANCED_SEARCH_HISTORY_STORAGE_KEY = 'advancedSearchHistory';
 const ADVANCED_SEARCH_HISTORY_LIMIT = 3;
 const ADVANCED_SEARCH_MAX_LOCATION_SPECIES_ID = 1375;
+const ADVANCED_SEARCH_RESERVED_KEYWORDS = {
+	seviian: {
+		keyword: 'seviian',
+		query: "originalpokemon has 'sevii'",
+		meta: 'original pokemon is Seviian'
+	},
+	tradepkm: {
+		keyword: 'tradepkm',
+		query: "name ~ ('snom','carbink','Pikipek','Florges','Furret','Murkrow','Dedenne','Aegislash','Ursaluna')",
+		meta: 'NPC trade input Pokemon'
+	},
+	receivepkm: {
+		keyword: 'receivepkm',
+		query: "originalpokemon ~ ('Carnivine','Eiscue','Farfetch','Chatot','Morpeko','Mimikyu','Chillet','Aegislash','Ursaluna')",
+		meta: 'Pokemon received from NPC trade'
+	}
+};
 
 // Clears derived caches so search metadata can be rebuilt from current data/save state.
 function resetAdvancedFeatureCaches() {
@@ -293,10 +310,27 @@ function getAdvancedSearchExamplePlaceholder() {
 	return "Example: (bst >= 600 and location has 'route 3')";
 }
 
+// Returns one reserved advanced-search keyword macro definition.
+function getAdvancedSearchReservedKeyword(keyword) {
+	return ADVANCED_SEARCH_RESERVED_KEYWORDS[normalizeSearchKey(keyword)] || null;
+}
+
+// Builds autocomplete entries for the reserved advanced-search keyword macros.
+function getAdvancedSearchReservedKeywordSuggestions() {
+	return Object.values(ADVANCED_SEARCH_RESERVED_KEYWORDS).map(keyword => ({
+		label: keyword.keyword,
+		insertText: keyword.keyword,
+		meta: keyword.meta,
+		category: 'reservedKeyword',
+		priority: 0
+	}));
+}
+
 // Builds attribute-level suggestions that remain available even when values are suppressed.
 function buildAdvancedSearchAttributeSuggestions(metadata) {
 	return [
 		{ label: 'not', insertText: 'not', meta: 'name operator', category: 'logical', priority: 0 },
+		...getAdvancedSearchReservedKeywordSuggestions(),
 		...metadata.attributes.map(attribute => ({
 			label: attribute.name,
 			insertText: attribute.name,
@@ -672,6 +706,52 @@ function buildImplicitNameSearchAst(query) {
 	};
 }
 
+// Expands one reserved keyword into its underlying advanced-search AST.
+function buildReservedAdvancedSearchAst(keyword) {
+	const reservedKeyword = getAdvancedSearchReservedKeyword(keyword);
+	return reservedKeyword ? parseAdvancedSearch(reservedKeyword.query) : null;
+}
+
+// Negates one AST so reserved keywords can be used after `not`.
+function negateAdvancedSearchAst(ast) {
+	if (!ast) {
+		return null;
+	}
+
+	if (ast.type === 'logical') {
+		return {
+			type: 'logical',
+			operator: ast.operator === 'and' ? 'or' : 'and',
+			left: negateAdvancedSearchAst(ast.left),
+			right: negateAdvancedSearchAst(ast.right)
+		};
+	}
+
+	const negatedOperators = {
+		'=': '!=',
+		'==': '!=',
+		'!=': '=',
+		'~': '!~',
+		'!~': '~',
+		has: 'not',
+		not: 'has',
+		'>': '<=',
+		'>=': '<',
+		'<': '>=',
+		'<=': '>'
+	};
+	const negatedOperator = negatedOperators[String(ast.operator || '').toLowerCase()];
+	if (!negatedOperator) {
+		throw new Error(`Unsupported reserved keyword negation for operator "${ast.operator}".`);
+	}
+
+	return {
+		...ast,
+		operator: negatedOperator,
+		value: Array.isArray(ast.value) ? [...ast.value] : ast.value
+	};
+}
+
 // Detects when the input should behave like a simple name search instead of AST syntax.
 function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
 	const query = input.trim();
@@ -693,6 +773,10 @@ function getPlainNameSearchAutocompleteContext(input, cursorIndex) {
 	}
 
 	if (tokens.some(token => token.type === 'word' && ['and', 'or', 'has', 'have', 'not'].includes(token.value.toLowerCase()))) {
+		return null;
+	}
+
+	if (getAdvancedSearchReservedKeyword(query)) {
 		return null;
 	}
 
@@ -730,6 +814,9 @@ function tryFinalizeAdvancedSearchAutocompleteToken(state, activeToken, currentA
 		case 'expectAttribute':
 			if (activeToken.type === 'word' && activeToken.value.toLowerCase() === 'not') {
 				return { state: 'expectValue', currentAttribute: 'name' };
+			}
+			if (activeToken.type === 'word' && getAdvancedSearchReservedKeyword(activeToken.value)) {
+				return { state: 'expectLogicalOrEnd', currentAttribute: null };
 			}
 			if (activeToken.type === 'word' && metadata.byName[normalizeSearchKey(activeToken.value)]) {
 				return { state: 'expectOperator', currentAttribute: activeToken.value };
@@ -828,6 +915,11 @@ function getAdvancedSearchAutocompleteContext(input, cursorIndex) {
 				if (token.type === 'word' && token.value.toLowerCase() === 'not') {
 					currentAttribute = 'name';
 					state = 'expectValue';
+					break;
+				}
+				if (token.type === 'word' && getAdvancedSearchReservedKeyword(token.value)) {
+					currentAttribute = null;
+					state = 'expectLogicalOrEnd';
 					break;
 				}
 				if (token.type === 'word') {
@@ -1069,13 +1161,16 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 
 	const plainNameContext = getPlainNameSearchAutocompleteContext(input, cursorIndex);
 	if (plainNameContext) {
-		const attributeSuggestions = metadata.attributes.map(attribute => ({
-			label: attribute.name,
-			insertText: attribute.name,
-			meta: attribute.kind,
-			category: 'attribute',
-			priority: 1
-		}));
+		const attributeSuggestions = [
+			...getAdvancedSearchReservedKeywordSuggestions(),
+			...metadata.attributes.map(attribute => ({
+				label: attribute.name,
+				insertText: attribute.name,
+				meta: attribute.kind,
+				category: 'attribute',
+				priority: 1
+			}))
+		];
 
 		return filterAdvancedSearchSuggestions(
 			[
@@ -1190,14 +1285,19 @@ function applyAdvancedSearchAutocompleteSuggestion(suggestion) {
 	const previousChar = context.rangeStart > 0 ? input.value[context.rangeStart - 1] : '';
 
 	if (
-		['operator', 'logical', 'value'].includes(suggestion.category) &&
+		['operator', 'logical', 'value', 'reservedKeyword'].includes(suggestion.category) &&
 		previousChar &&
 		!/\s|\(|,/.test(previousChar)
 	) {
 		replacement = ` ${replacement}`;
 	}
 
-	if (suggestion.category === 'operator' || suggestion.category === 'logical' || suggestion.insertText === ',') {
+	if (
+		suggestion.category === 'operator' ||
+		suggestion.category === 'logical' ||
+		suggestion.category === 'reservedKeyword' ||
+		suggestion.insertText === ','
+	) {
 		replacement += ' ';
 	}
 
@@ -2008,12 +2108,27 @@ function parseAdvancedSearch(input) {
 					value: false
 				};
 			}
+			if (
+				peek()?.type === 'word' &&
+				getAdvancedSearchReservedKeyword(peek().value) &&
+				isAdvancedSearchClauseBoundaryToken(tokens[index + 1])
+			) {
+				return negateAdvancedSearchAst(buildReservedAdvancedSearchAst(consume().value));
+			}
 			return {
 				type: 'comparison',
 				attribute: 'name',
 				operator: 'not',
 				value: parseValue()
 			};
+		}
+
+		if (
+			peek()?.type === 'word' &&
+			getAdvancedSearchReservedKeyword(peek().value) &&
+			isAdvancedSearchClauseBoundaryToken(tokens[index + 1])
+		) {
+			return buildReservedAdvancedSearchAst(consume().value);
 		}
 
 		return parseComparison();
