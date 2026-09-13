@@ -95,6 +95,16 @@ const ADVANCED_SEARCH_RESERVED_KEYWORDS = {
 		query: "originalpokemon has 'sevii'",
 		meta: 'original pokemon is Seviian'
 	},
+	legendary: {
+		keyword: 'legendary',
+		query: 'legendary = true',
+		meta: 'Legendary Pokemon'
+	},
+	mythical: {
+		keyword: 'mythical',
+		query: 'mythical = true',
+		meta: 'Mythical Pokemon'
+	},
 	tradepkm: {
 		keyword: 'tradepkm',
 		query: "name ~ ('snom','carbink','Pikipek','Florges','Furret','Murkrow','Dedenne','Aegislash','Ursaluna')",
@@ -106,6 +116,8 @@ const ADVANCED_SEARCH_RESERVED_KEYWORDS = {
 		meta: 'Pokemon received from NPC trade'
 	}
 };
+const ADVANCED_SEARCH_LEGENDARY_DEX_IDS = new Set([144,145,146,150,243,244,245,249,250,377,378,379,380,381,382,383,384,480,481,482,483,484,485,486,487,488,638,639,640,641,642,645,643,644,646,716,717,718,772,773,785,786,787,788,789,790,791,792,800,888,889,890,891,892,894,895,896,897,898,905,1001,1002,1003,1004,1007,1008,1014,1015,1016,1017,1024]);
+const ADVANCED_SEARCH_MYTHICAL_DEX_IDS = new Set([151,251,385,386,490,491,492,493,494,647,648,649,719,720,721,801,802,807,808,809,893,1025]);
 
 // Clears derived caches so search metadata can be rebuilt from current data/save state.
 function resetAdvancedFeatureCaches() {
@@ -312,31 +324,117 @@ function getAdvancedSearchExamplePlaceholder() {
 
 // Returns one reserved advanced-search keyword macro definition.
 function getAdvancedSearchReservedKeyword(keyword) {
-	return ADVANCED_SEARCH_RESERVED_KEYWORDS[normalizeSearchKey(keyword)] || null;
+	const normalizedKeyword = normalizeSearchKey(keyword);
+	const reservedKeyword = ADVANCED_SEARCH_RESERVED_KEYWORDS[normalizedKeyword];
+	if (reservedKeyword) {
+		return reservedKeyword;
+	}
+
+	const typeNames = getAdvancedSearchReservedTypeNames(keyword);
+	if (!typeNames) {
+		return null;
+	}
+
+	return {
+		keyword: String(keyword || '').trim().toLowerCase(),
+		query: typeNames.length === 1
+			? `type = ${typeNames[0]}`
+			: `type = (${typeNames.map(typeName => quoteAdvancedSearchValue(typeName)).join(',')})`,
+		meta: typeNames.length === 1
+			? `${typeNames[0]} type`
+			: `${typeNames[0]}/${typeNames[1]} type`
+	};
+}
+
+// Returns the canonical type names referenced by a reserved type keyword.
+function getAdvancedSearchReservedTypeNames(keyword) {
+	const rawKeyword = String(keyword || '').trim().toLowerCase();
+	if (!rawKeyword) {
+		return null;
+	}
+
+	const rawParts = rawKeyword.split('-');
+	if (!rawParts.length || rawParts.length > 2 || rawParts.some(part => !part.trim())) {
+		return null;
+	}
+
+	const typeLookup = new Map(
+		Object.values(types || {}).map(type => [normalizeSearchKey(type.name), type.name.toLowerCase()])
+	);
+	const typeNames = rawParts.map(part => typeLookup.get(normalizeSearchKey(part)));
+	if (typeNames.some(typeName => !typeName)) {
+		return null;
+	}
+
+	if (typeNames.length === 2 && typeNames[0] === typeNames[1]) {
+		return null;
+	}
+
+	return typeNames;
+}
+
+// Builds autocomplete entries for single-type and dashed dual-type reserved keywords.
+function getAdvancedSearchReservedTypeKeywordSuggestions(fragment = '') {
+	const typeNames = Object.values(types || {}).map(type => type.name.toLowerCase());
+	const suggestions = typeNames.map(typeName => ({
+		label: typeName,
+		insertText: typeName,
+		meta: `${typeName} type`,
+		category: 'reservedKeyword',
+		priority: 0
+	}));
+
+	if (!String(fragment || '').includes('-')) {
+		return suggestions;
+	}
+
+	for (const leftType of typeNames) {
+		for (const rightType of typeNames) {
+			if (leftType === rightType) {
+				continue;
+			}
+			suggestions.push({
+				label: `${leftType}-${rightType}`,
+				insertText: `${leftType}-${rightType}`,
+				meta: `${leftType}/${rightType} type`,
+				category: 'reservedKeyword',
+				priority: 0
+			});
+		}
+	}
+
+	return suggestions;
 }
 
 // Builds autocomplete entries for the reserved advanced-search keyword macros.
-function getAdvancedSearchReservedKeywordSuggestions() {
-	return Object.values(ADVANCED_SEARCH_RESERVED_KEYWORDS).map(keyword => ({
+function getAdvancedSearchReservedKeywordSuggestions(fragment = '') {
+	return [
+		...Object.values(ADVANCED_SEARCH_RESERVED_KEYWORDS).map(keyword => ({
 		label: keyword.keyword,
 		insertText: keyword.keyword,
 		meta: keyword.meta,
 		category: 'reservedKeyword',
 		priority: 0
-	}));
+		})),
+		...getAdvancedSearchReservedTypeKeywordSuggestions(fragment)
+	];
 }
 
 // Builds attribute-level suggestions that remain available even when values are suppressed.
-function buildAdvancedSearchAttributeSuggestions(metadata) {
+function buildAdvancedSearchAttributeSuggestions(metadata, fragment = '') {
+	const reservedSuggestions = getAdvancedSearchReservedKeywordSuggestions(fragment);
+	const reservedLabels = new Set(reservedSuggestions.map(suggestion => normalizeSearchKey(suggestion.label)));
 	return [
 		{ label: 'not', insertText: 'not', meta: 'name operator', category: 'logical', priority: 0 },
-		...getAdvancedSearchReservedKeywordSuggestions(),
-		...metadata.attributes.map(attribute => ({
+		...reservedSuggestions,
+		...metadata.attributes
+			.filter(attribute => !reservedLabels.has(normalizeSearchKey(attribute.name)))
+			.map(attribute => ({
 			label: attribute.name,
 			insertText: attribute.name,
 			meta: attribute.kind,
 			category: 'attribute'
-		}))
+			}))
 	];
 }
 
@@ -725,6 +823,19 @@ function negateAdvancedSearchAst(ast) {
 			left: negateAdvancedSearchAst(ast.left),
 			right: negateAdvancedSearchAst(ast.right)
 		};
+	}
+
+	if (Array.isArray(ast.value) && ['=', '=='].includes(String(ast.operator || '').toLowerCase())) {
+		return ast.value
+			.map(value => ({
+				type: 'comparison',
+				attribute: ast.attribute,
+				operator: '!=',
+				value
+			}))
+			.reduce((expression, comparison) => expression
+				? { type: 'logical', operator: 'or', left: expression, right: comparison }
+				: comparison, null);
 	}
 
 	const negatedOperators = {
@@ -1161,15 +1272,19 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 
 	const plainNameContext = getPlainNameSearchAutocompleteContext(input, cursorIndex);
 	if (plainNameContext) {
+		const reservedSuggestions = getAdvancedSearchReservedKeywordSuggestions(plainNameContext.fragment);
+		const reservedLabels = new Set(reservedSuggestions.map(suggestion => normalizeSearchKey(suggestion.label)));
 		const attributeSuggestions = [
-			...getAdvancedSearchReservedKeywordSuggestions(),
-			...metadata.attributes.map(attribute => ({
+			...reservedSuggestions,
+			...metadata.attributes
+				.filter(attribute => !reservedLabels.has(normalizeSearchKey(attribute.name)))
+				.map(attribute => ({
 				label: attribute.name,
 				insertText: attribute.name,
 				meta: attribute.kind,
 				category: 'attribute',
 				priority: 1
-			}))
+				}))
 		];
 
 		return filterAdvancedSearchSuggestions(
@@ -1195,7 +1310,7 @@ function getAdvancedSearchAutocompleteSuggestions(input, cursorIndex) {
 	switch (context.state) {
 		case 'expectAttribute':
 			return filterAdvancedSearchSuggestions(
-				buildAdvancedSearchAttributeSuggestions(metadata),
+				buildAdvancedSearchAttributeSuggestions(metadata, context.fragment),
 				context.fragment
 			);
 		case 'expectOperator':
@@ -1848,6 +1963,16 @@ function getSpeciesHardcoreMoveAdjustments(mon) {
 	return removed;
 }
 
+// Returns whether the species belongs to the canonical Legendary group.
+function isLegendarySpecies(mon) {
+	return ADVANCED_SEARCH_LEGENDARY_DEX_IDS.has(mon.dexID);
+}
+
+// Returns whether the species belongs to the canonical Mythical group.
+function isMythicalSpecies(mon) {
+	return ADVANCED_SEARCH_MYTHICAL_DEX_IDS.has(mon.dexID);
+}
+
 // Formats the species' forward evolutions for display or export.
 function getSpeciesEvolutionEntries(mon) {
 	return (mon.evolutions || []).map(evo => ({
@@ -1928,7 +2053,9 @@ function buildSpeciesSearchRecord(mon) {
 			dexid: mon.dexID
 		},
 		booleans: {
-			available: isSpeciesFamilyAvailable(familyMembers)
+			available: isSpeciesFamilyAvailable(familyMembers),
+			legendary: isLegendarySpecies(mon),
+			mythical: isMythicalSpecies(mon)
 		},
 		lists: {
 			type: mon.type.map(typeId => types[typeId].name),

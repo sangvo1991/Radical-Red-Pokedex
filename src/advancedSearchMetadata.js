@@ -37,6 +37,8 @@ const ADVANCED_SEARCH_ATTRIBUTE_CONFIG = {
 	originalpokemon: { kind: 'list', valuesKey: 'originalSpeciesNames' },
 	originalspecies: { kind: 'list', valuesKey: 'originalSpeciesNames' },
 	available: { kind: 'boolean', valuesKey: 'booleanValues' },
+	legendary: { kind: 'boolean', valuesKey: 'booleanValues' },
+	mythical: { kind: 'boolean', valuesKey: 'booleanValues' },
 	egggroup: { kind: 'list', valuesKey: 'eggGroupNames' },
 	egggroups: { kind: 'list', valuesKey: 'eggGroupNames' }
 };
